@@ -7,14 +7,18 @@ import { describe, it } from 'mocha';
 import {
   attachSseToServer,
   McpSseServer,
-  resolveSseConfig
+  resolveSseConfig,
+  shouldAttachSseToServer
 } from '../src/scripts/sse.js';
+import startSse from '../src/scripts/sse.js';
+import { createMcpServer } from '../src/plugin.js';
 import {
+  createCtxStub,
   createMockRequest,
   expectJson,
   MockResponse
 } from './helpers.js';
-import type { AuthContext } from '../src/types.js';
+import type { AuthContext, ToolResolverServer } from '../src/types.js';
 
 type MessageResponse = {
   jsonrpc: '2.0';
@@ -458,5 +462,239 @@ describe('ai/sse', () => {
     } finally {
       McpSseServer.prototype.dispatch = originalDispatch;
     }
+  });
+
+  /**
+   * Build a real MCP tool factory backed by one simple public GET tool so
+   * the transport-level tests below exercise the unsubclassed transport
+   * against a real @modelcontextprotocol/sdk McpServer instance.
+   */
+  function makeRealFactory() {
+    const ctx = createCtxStub({
+      config: {
+        'mcp.tools': [{
+          name: 'ping',
+          title: 'Ping',
+          event: 'ping',
+          method: 'GET'
+        }]
+      },
+      resolves: {
+        ping: { results: { ok: true } }
+      }
+    });
+
+    return async (auth?: AuthContext) => createMcpServer(
+      ctx as unknown as ToolResolverServer,
+      auth
+    );
+  }
+
+  it('should open a real sse session and accept a real json-rpc message', async () => {
+    const server = new McpSseServer(
+      makeRealFactory(),
+      async () => ({ kind: 'public' }),
+      '127.0.0.1',
+      0,
+      '/sse',
+      '/messages',
+      {
+        resolve: () => undefined,
+        reject: error => { throw error; }
+      }
+    );
+
+    //start (and later shut down) a real listener so the shutdown path below
+    // closes a live session and a live service instead of a never-started one
+    await server.start();
+
+    const connectRes = new MockResponse();
+    await server.dispatch(
+      createMockRequest({ method: 'GET', url: '/sse', headers: { host: 'localhost' } }),
+      connectRes
+    );
+
+    expect(connectRes.statusCode).to.equal(200);
+    expect(connectRes.headers.get('content-type')).to.equal('text/event-stream');
+    const match = connectRes.body.match(/sessionId=([a-f0-9-]+)/);
+    expect(match).to.not.equal(null);
+
+    const messageRes = new MockResponse();
+    await server.dispatch(
+      createMockRequest({
+        method: 'POST',
+        url: `/messages?sessionId=${match![1]}`,
+        headers: { host: 'localhost', 'content-type': 'application/json' },
+        body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'tools/list', params: {} })
+      }),
+      messageRes
+    );
+
+    expect(messageRes.statusCode).to.equal(202);
+
+    //shutting down should close the live session (triggering its onclose
+    // cleanup) and the live service together
+    await server.shutdown();
+  });
+
+  it('should reject unrelated paths and methods with a 404', async () => {
+    const server = new McpSseServer(
+      makeRealFactory(),
+      async () => ({ kind: 'public' }),
+      '127.0.0.1',
+      17771,
+      '/sse',
+      '/messages',
+      {
+        resolve: () => undefined,
+        reject: error => { throw error; }
+      }
+    );
+
+    const res = new MockResponse();
+    await server.dispatch(
+      createMockRequest({ method: 'GET', url: '/wrong', headers: { host: 'localhost' } }),
+      res
+    );
+
+    expect(res.statusCode).to.equal(404);
+    expect(res.body).to.equal('Not Found');
+  });
+
+  it('should ignore attached requests whose resource is not a Node request/response pair', async () => {
+    const ctx = makeAttachCtx({ 'mcp.sse.route': '/sse', 'mcp.messages': '/messages' });
+    attachSseToServer(ctx as never);
+    const listener = ctx.listener?.();
+
+    const result = await listener!({
+      req: { data() { return {}; }, resource: {} },
+      res: { resource: makeAttachedResponse(), stop() {} }
+    });
+
+    expect(result).to.equal(undefined);
+  });
+
+  it('should return 404 when a message targets a session that does not exist', async () => {
+    const server = new McpSseServer(
+      makeRealFactory(),
+      async () => ({ kind: 'public' }),
+      '127.0.0.1',
+      17769,
+      '/sse',
+      '/messages',
+      {
+        resolve: () => undefined,
+        reject: error => { throw error; }
+      }
+    );
+
+    const res = new MockResponse();
+    await server.dispatch(
+      createMockRequest({
+        method: 'POST',
+        url: '/messages?sessionId=missing',
+        headers: { host: 'localhost', 'content-type': 'application/json' },
+        body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'tools/list' })
+      }),
+      res
+    );
+
+    expect(res.statusCode).to.equal(404);
+    expect(res.body).to.equal('Session not found');
+  });
+
+  it('should translate a failed session factory into a plain-text 500 error', async () => {
+    const server = new McpSseServer(
+      async () => null,
+      async () => ({ kind: 'public' }),
+      '127.0.0.1',
+      17770,
+      '/sse',
+      '/messages',
+      {
+        resolve: () => undefined,
+        reject: error => { throw error; }
+      }
+    );
+
+    const res = new MockResponse();
+    await server.dispatch(
+      createMockRequest({ method: 'GET', url: '/sse', headers: { host: 'localhost' } }),
+      res
+    );
+
+    expect(res.statusCode).to.equal(500);
+    expect(res.body).to.equal('Resolved MCP tool registry is empty.');
+  });
+
+  it('should attach through the main server when sse host and port match', async () => {
+    const ctx = createCtxStub({ config: { mcp: {} } });
+    await startSse(ctx as unknown as never);
+    expect(shouldAttachSseToServer(ctx as unknown as never)).to.equal(true);
+  });
+
+  it('should start a standalone listener and resolve once shut down when sse is on its own port', async function () {
+    this.timeout(10000);
+
+    let captured: InstanceType<typeof McpSseServer> | undefined;
+    const originalStart = McpSseServer.prototype.start;
+    McpSseServer.prototype.start = async function (this: InstanceType<typeof McpSseServer>) {
+      captured = this;
+      return originalStart.call(this);
+    };
+
+    try {
+      const ctx = createCtxStub({
+        config: {
+          mcp: {},
+          'mcp.sse': {},
+          'mcp.sse.host': '127.0.0.1',
+          'mcp.sse.port': 0,
+          'server.host': '127.0.0.1',
+          'server.port': 3000
+        }
+      });
+      ctx.registered.mcp = makeRealFactory();
+
+      const pending = startSse(ctx as unknown as never);
+      //give the listener a tick to bind before shutting it down
+      await new Promise(resolve => setTimeout(resolve, 25));
+      expect(captured).to.exist;
+
+      await captured!.shutdown();
+      await pending;
+    } finally {
+      McpSseServer.prototype.start = originalStart;
+    }
+  });
+
+  it('should only attach the sse request handler once per server', () => {
+    const ctx = makeAttachCtx({ 'mcp.sse.route': '/sse', 'mcp.messages': '/messages' });
+    attachSseToServer(ctx as never);
+    const first = ctx.listener?.();
+    attachSseToServer(ctx as never);
+    const second = ctx.listener?.();
+
+    expect(second).to.equal(first);
+  });
+
+  it('should ignore attached requests that do not match the sse or message routes', async () => {
+    const ctx = makeAttachCtx({ 'mcp.sse.route': '/sse', 'mcp.messages': '/messages' });
+    attachSseToServer(ctx as never);
+    const listener = ctx.listener?.();
+
+    const result = await listener!({
+      req: {
+        data() { return {}; },
+        resource: makeAttachedRequest({
+          method: 'GET',
+          url: '/not-sse',
+          headers: { host: 'localhost' }
+        })
+      },
+      res: { resource: makeAttachedResponse(), stop() {} }
+    });
+
+    expect(result).to.equal(undefined);
   });
 });

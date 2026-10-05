@@ -145,3 +145,5 @@ stackpress/tests/out
 archives
 
 .vscode
+
+.agents/

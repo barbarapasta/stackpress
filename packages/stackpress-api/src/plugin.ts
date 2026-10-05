@@ -2,11 +2,13 @@
 import type Server from '@stackpress/ingest/Server';
 import type Request from '@stackpress/ingest/Request';
 import type Response from '@stackpress/ingest/Response';
+//stackpress-session
+import type { OAuthApiOperationDescriptor, OAuthPlugin } from 'stackpress-session/types';
 //stackpress-api
-import type { 
-  ApiConfig, 
+import type {
+  ApiConfig,
   ApiEndpoint,
-  Application, 
+  Application,
   Session
 } from './types.js';
 import { authorize, unauthorized, validData } from './helpers.js';
@@ -49,9 +51,11 @@ export default function plugin(ctx: Server) {
     ctx.import.all('/auth/oauth/token', () => import('./pages/token.js'));
     ctx.import.all('/auth/oauth', () => import('./pages/oauth.js'));
     ctx.view.all('/auth/oauth', 'stackpress-api/esm/views/oauth', -100);
+    const oauthIds = new Set<string>();
     for (const endpoint of endpoints) {
       //cors check
       cors(endpoint, ctx);
+      registerOAuthOperation(endpoint, ctx, oauthIds);
       if (endpoint.type === 'session') {
         session(endpoint, ctx);
       } else if (endpoint.type === 'app') {
@@ -62,6 +66,74 @@ export default function plugin(ctx: Server) {
     }
   });
 };
+
+/**
+ * Validates an endpoint's OAuth opt-in and saves the trusted operation
+ * descriptor with session's OAuth service so finalize() can check for
+ * ID/route collisions. Membership must be explicit: app-only and
+ * public API routes cannot enable user OAuth, and `oauth: true` is
+ * invalid because it does not name one operation ID.
+ */
+export function registerOAuthOperation(
+  endpoint: ApiEndpoint,
+  ctx: Server,
+  oauthIds: Set<string>
+) {
+  if (!endpoint.oauth) return;
+  if (endpoint.oauth === true || typeof endpoint.oauth !== 'object') {
+    throw new Error(
+      `Endpoint ${endpoint.method} ${endpoint.route}: oauth must explicitly ` +
+      `name one operation ID, not a boolean`
+    );
+  }
+  if (endpoint.type !== 'session') {
+    throw new Error(
+      `Endpoint ${endpoint.method} ${endpoint.route}: only type: 'session' ` +
+      `routes can enable user OAuth`
+    );
+  }
+  if (endpoint.method === 'ALL') {
+    throw new Error(
+      `Endpoint ${endpoint.method} ${endpoint.route}: OAuth-enabled routes ` +
+      `must declare a concrete method, not ALL`
+    );
+  }
+  const { operation, resources } = endpoint.oauth;
+  if (typeof operation !== 'string' || !operation) {
+    throw new Error(
+      `Endpoint ${endpoint.method} ${endpoint.route}: oauth.operation is ` +
+      `required`
+    );
+  }
+  if (oauthIds.has(operation)) {
+    throw new Error(`Duplicate OAuth API operation ID: ${operation}`);
+  }
+  oauthIds.add(operation);
+  if (!Array.isArray(resources) || resources.length === 0) {
+    throw new Error(
+      `Endpoint ${endpoint.method} ${endpoint.route}: oauth.resources must ` +
+      `declare at least one resource`
+    );
+  }
+  const oauth = ctx.plugin<OAuthPlugin>('oauth');
+  if (!oauth) {
+    throw new Error(
+      `Endpoint ${endpoint.method} ${endpoint.route}: oauth requires ` +
+      `session.oauth to be configured`
+    );
+  }
+  const descriptor: OAuthApiOperationDescriptor = {
+    id: operation,
+    surface: 'api',
+    method: endpoint.method,
+    route: endpoint.route,
+    event: endpoint.event,
+    resources,
+    scopes: endpoint.scopes || [],
+    data: endpoint.data || {}
+  };
+  oauth.registerApiOperation(descriptor);
+}
 
 export function cors(endpoint: ApiEndpoint, ctx: Server) {
   let origin = endpoint.cors === true ? '*' : endpoint.cors;

@@ -1,0 +1,41 @@
+{
+  "node": "v22.23.2",
+  "sdk": "1.29.0",
+  "ingest": "0.10.8",
+  "checks": [
+    {
+      "name": "current saved session",
+      "result": "defect reproduced",
+      "observations": [
+        "missing key retains Alice",
+        "Bob key retains Alice",
+        "deleted backing session retains Alice",
+        "auth resolved only once"
+      ]
+    },
+    {
+      "name": "stateful browser Origin",
+      "result": "unapproved Origin accepted"
+    },
+    {
+      "name": "current stateless",
+      "result": "fresh per-request identity"
+    },
+    {
+      "name": "stateless browser Origin",
+      "result": "unapproved Origin accepted"
+    },
+    {
+      "name": "current real Ingest attached HTTP",
+      "result": "POST parses correctly; missing key retains Alice; GET/DELETE fall through 404"
+    },
+    {
+      "name": "current legacy SSE",
+      "result": "missing POST key and deleted backing session retain Alice"
+    },
+    {
+      "name": "current real Ingest attached older SSE",
+      "result": "initialize rejected400; req.data merges query sessionId into strict JSON-RPC body"
+    }
+  ]
+}

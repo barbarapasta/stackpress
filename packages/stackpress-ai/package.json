@@ -106,6 +106,7 @@
     "@stackpress/ingest": "0.10.8",
     "stackpress-api": "0.10.8",
     "stackpress-schema": "0.10.8",
+    "stackpress-session": "0.10.8",
     "zod": "4.3.6"
   },
   "devDependencies": {

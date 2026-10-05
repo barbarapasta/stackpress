@@ -7,9 +7,13 @@ import { fileURLToPath } from 'node:url';
 import { parse } from '@stackpress/idea-parser';
 import { expect } from 'chai';
 import { describe, it } from 'mocha';
+import Schema from 'stackpress-schema/Schema';
 import { createProject } from 'stackpress-schema/transform/helpers';
+import type Column from 'stackpress-schema/Column';
 //client
 import generate from '../src/transform/index.js';
+import { generateTool } from '../src/transform/tools.js';
+import { columnToJsonSchema, modelScope } from '../src/transform/helpers.js';
 
 /**
  * Cache the parsed blog schema so the suite stays aligned with the live
@@ -90,5 +94,82 @@ describe('ai/transform', () => {
     expect(packageJson.exports['./Article/tools']).to.equal(
       './Article/tools/index.js'
     );
+  });
+
+  it('should stay idempotent when generation runs a second time', async function () {
+    this.timeout(15000);
+
+    const tmpdir = fs.mkdtempSync(
+      path.join(os.tmpdir(), 'stackpress-ai-transform-idempotent-')
+    );
+    const project = await createProject(tmpdir);
+    const directory = project.createDirectory(tmpdir);
+    const schema = loadBlogSchema();
+
+    //regenerating twice should not duplicate the root tools import/export,
+    // exercising the "already present" branches that the first run of a
+    // fresh project never reaches.
+    await generate({
+      config: {},
+      cwd: tmpdir,
+      directory,
+      project,
+      schema,
+      terminal: {} as never,
+      transformer: {} as never
+    });
+    await generate({
+      config: {},
+      cwd: tmpdir,
+      directory,
+      project,
+      schema,
+      terminal: {} as never,
+      transformer: {} as never
+    });
+
+    const index = directory.getSourceFileOrThrow('index.ts');
+    const text = index.getFullText();
+    const importMatches = text.match(/from ['"]\.\/tools\.js['"]/g) || [];
+    const exportMatches = text.match(/export \{ tools \};/g) || [];
+
+    expect(importMatches).to.have.length(1);
+    expect(exportMatches).to.have.length(1);
+  });
+
+  it('should no-op for a generated tool operation outside the approved rollout', async () => {
+    const tmpdir = fs.mkdtempSync(
+      path.join(os.tmpdir(), 'stackpress-ai-transform-noop-')
+    );
+    const project = await createProject(tmpdir);
+    const directory = project.createDirectory(tmpdir);
+    const schema = Schema.make(loadBlogSchema());
+    const [ model ] = Array.from(schema.models.values());
+
+    //the generated-tool surface is intentionally limited to search, detail,
+    // create and update; any other operation must be dropped rather than
+    // crash the generator.
+    expect(() => generateTool(directory, model, 'delete' as never))
+      .to.not.throw();
+    expect(directory.getSourceFiles().some(
+      file => file.getFilePath().endsWith('/delete.ts')
+    )).to.equal(false);
+  });
+
+  it('should derive the plural kebab-case scope prefix for a real model', () => {
+    const schema = Schema.make(loadBlogSchema());
+    const [ model ] = Array.from(schema.models.values());
+
+    expect(modelScope(model)).to.be.a('string');
+    expect(modelScope(model)).to.match(/^[a-z0-9-]+$/);
+  });
+
+  it('should build a schema fragment without a description when the column has none', () => {
+    const column = {
+      type: { name: 'String', multiple: false },
+      document: {}
+    } as unknown as Column;
+
+    expect(columnToJsonSchema(column)).to.deep.equal({ type: 'string' });
   });
 });

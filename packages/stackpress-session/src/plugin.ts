@@ -4,6 +4,7 @@ import type Server from '@stackpress/ingest/Server';
 import email from 'stackpress-email/plugin'
 //stackpress-session
 import auth from './auth/plugin.js';
+import oauth from './oauth/plugin.js';
 import session from './session/plugin.js';
 
 /**
@@ -13,4 +14,5 @@ export default function plugin(ctx: Server) {
   auth(ctx);
   email(ctx)
   session(ctx);
+  oauth(ctx);
 };

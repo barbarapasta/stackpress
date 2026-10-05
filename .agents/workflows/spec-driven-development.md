@@ -22,6 +22,8 @@ Do not make future specs depend on sibling specs for shared truth. Promote accep
 5. `.agents/specs/<spec-id>/index.md`, when updating an existing spec
 6. relevant Spec Files, Source Material, project files, and user instructions
 
+Whenever this workflow creates an Agent Document, apply the [Agent File Creation Workflow](agent-file-creation.md). Whenever it changes an existing Agent Document, apply the [Agent File Update Workflow](agent-file-update.md). Complete content before applying line thresholds.
+
 Do not load unrelated spec folders unless the current spec explicitly links to them or the user asks for cross-spec review.
 
 ## Spec Folder Naming
@@ -84,7 +86,7 @@ If no Proofs are required, record `Proofs: not required` in `status.md`. Do not 
 Use optional companion workflows any time during spec planning, in any order, and as many times as needed:
 
 - [Spec Grill Session Workflow](spec-grill-session.md): use when unresolved Gaps, fuzzy terms, interrupted Q/A, or decision ambiguity need one-question-at-a-time clarification.
-- [Spec User Journeys Workflow](spec-user-journeys.md): use when the spec has user-facing behavior, actors, permissions, lifecycle states, integrations, or step sequencing that should be mapped before Freeze.
+- [Spec User Journeys Workflow](spec-user-journeys.md): use when the spec needs systematic coverage of human actors, actor states, features, applicable Use Cases, journey scenarios, permissions, lifecycle states, integrations, or step sequencing before Freeze.
 
 These loops are not required for every spec. When a loop is invoked, update the spec `index.md`, `decisions.md`, and `status.md` with the result. When a loop is not applicable but its absence affects Freeze readiness, record `not applicable` in `status.md` with a reason.
 
@@ -125,6 +127,7 @@ A spec can be Frozen only when:
 - `decisions.md` has every material Gap answered, accepted, deferred, or explicitly unresolved with user approval
 - required research is complete or explicitly deferred
 - Proofs are marked not required in `status.md`, or required Proofs are recorded in `proofs.md` and Frozen in `status.md`
+- user journey coverage is marked complete when applicable, or marked not applicable with a reason; all journey-created Gaps follow the same decision requirements above
 - reusable accepted truth has been promoted or deliberately left spec-local
 - the spec does not conflict with `.agents/context/`
 
@@ -135,6 +138,10 @@ After Freeze, do not change Frozen Spec Files unless the user explicitly permits
 After Freeze, use [Spec Task Implementation Workflow](spec-task-implementation.md) when the user wants to plan or implement technical tasks from `.agents/specs/<spec-id>/`.
 
 Implementation planning belongs under `.agents/specs/<spec-id>/tasks/`. Keep implementation sequencing, task status, verification notes, and user acceptance records out of `.agents/context/` unless implementation reveals accepted reusable truth that future specs should inherit.
+
+When the user explicitly delegates acceptance of verified tasks to an agent,
+use the [Spec Task Acceptance Workflow](spec-task-acceptance.md). Do not infer
+delegation from an ordinary implementation request.
 
 ## Validate
 

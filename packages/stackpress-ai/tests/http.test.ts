@@ -7,9 +7,14 @@ import { describe, it } from 'mocha';
 import {
   attachHttpToServer,
   McpHttpServer,
-  resolveHttpConfig
+  resolveHttpConfig,
+  shouldAttachHttpToServer
 } from '../src/scripts/http.js';
+import startHttp from '../src/scripts/http.js';
+import { createMcpServer } from '../src/plugin.js';
+import type { AuthContext, ToolResolverServer } from '../src/types.js';
 import {
+  createCtxStub,
   createMockRequest,
   expectJson,
   header,
@@ -193,7 +198,10 @@ function makeCtx(config: Record<string, unknown> = {}) {
 /**
  * Create one minimal attached-server stub that captures the request listener.
  */
-function makeAttachCtx(config: Record<string, unknown> = {}) {
+function makeAttachCtx(
+  config: Record<string, unknown> = {},
+  pluginFactory?: <T = unknown>(name: string) => T
+) {
   let listener: Function | undefined;
   const ctx: ConfigStub & {
     listener: () => Function | undefined
@@ -208,7 +216,10 @@ function makeAttachCtx(config: Record<string, unknown> = {}) {
         listener = callback;
       }
     },
-    plugin<T = unknown>() {
+    plugin<T = unknown>(name: string) {
+      if (pluginFactory) {
+        return pluginFactory<T>(name);
+      }
       return (async () => null) as T;
     },
     listener() {
@@ -447,5 +458,338 @@ describe('ai/http', () => {
 
     expect(resolved.host).to.equal('192.168.1.10');
     expect(resolved.port).to.equal(17759);
+  });
+
+  /**
+   * Build a real MCP tool factory backed by one simple public GET tool so
+   * the transport-level tests below exercise the unsubclassed transport
+   * against a real @modelcontextprotocol/sdk McpServer instance.
+   */
+  function makeRealFactory() {
+    const ctx = createCtxStub({
+      config: {
+        'mcp.tools': [{
+          name: 'ping',
+          title: 'Ping',
+          event: 'ping',
+          method: 'GET'
+        }]
+      },
+      resolves: {
+        ping: { results: { ok: true } }
+      }
+    });
+
+    return async (auth?: AuthContext) => createMcpServer(
+      ctx as unknown as ToolResolverServer,
+      auth
+    );
+  }
+
+  it('should create a real session over a live socket and then shut down cleanly', async function () {
+    this.timeout(10000);
+
+    const server = new McpHttpServer(
+      makeRealFactory(),
+      async () => ({ kind: 'public' }),
+      '127.0.0.1',
+      0,
+      '/mcp',
+      'stateful',
+      {
+        resolve: () => undefined,
+        reject: error => { throw error; }
+      }
+    );
+
+    await server.start();
+    const port = (server as unknown as {
+      _service: { address(): { port: number } }
+    })._service.address().port;
+
+    try {
+      const response = await fetch(`http://127.0.0.1:${port}/mcp`, {
+        method: 'POST',
+        headers: {
+          'content-type': 'application/json',
+          accept: 'application/json, text/event-stream'
+        },
+        body: JSON.stringify(initialize)
+      });
+
+      expect(response.status).to.equal(200);
+      expect(response.headers.get('mcp-session-id')).to.be.a('string');
+    } finally {
+      await server.shutdown();
+    }
+  });
+
+  it('should create a real stateless session per request over a live socket', async function () {
+    this.timeout(10000);
+
+    const server = new McpHttpServer(
+      makeRealFactory(),
+      async () => ({ kind: 'public' }),
+      '127.0.0.1',
+      0,
+      '/mcp',
+      'stateless',
+      {
+        resolve: () => undefined,
+        reject: error => { throw error; }
+      }
+    );
+
+    await server.start();
+    const port = (server as unknown as {
+      _service: { address(): { port: number } }
+    })._service.address().port;
+
+    try {
+      const response = await fetch(`http://127.0.0.1:${port}/mcp`, {
+        method: 'POST',
+        headers: {
+          'content-type': 'application/json',
+          accept: 'application/json, text/event-stream'
+        },
+        body: JSON.stringify(initialize)
+      });
+
+      expect(response.status).to.equal(200);
+      //stateless sessions do not persist a reusable session id
+      expect(response.headers.get('mcp-session-id')).to.equal(null);
+    } finally {
+      await server.shutdown();
+    }
+  });
+
+  it('should translate a failed session factory into a JSON-RPC 500 error', async () => {
+    const server = new McpHttpServer(
+      async () => null,
+      async () => ({ kind: 'public' }),
+      '127.0.0.1',
+      17764,
+      '/mcp',
+      'stateful',
+      {
+        resolve: () => undefined,
+        reject: error => { throw error; }
+      }
+    );
+
+    const res = new MockResponse();
+    await server.dispatch(
+      createMockRequest({
+        method: 'POST',
+        url: '/mcp',
+        headers: { host: 'localhost', 'content-type': 'application/json' },
+        body: JSON.stringify(initialize)
+      }),
+      res
+    );
+
+    expect(res.statusCode).to.equal(500);
+    const body = expectJson<JsonRpcResponse>(res.body);
+    expect(body.error?.message).to.equal('Resolved MCP tool registry is empty.');
+  });
+
+  it('should reject a follow-up request with no session id as a bad request', async () => {
+    const server = new McpHttpServer(
+      async () => null,
+      async () => ({ kind: 'public' }),
+      '127.0.0.1',
+      17765,
+      '/mcp',
+      'stateful',
+      {
+        resolve: () => undefined,
+        reject: error => { throw error; }
+      }
+    );
+
+    const res = new MockResponse();
+    await server.dispatch(
+      createMockRequest({
+        method: 'POST',
+        url: '/mcp',
+        headers: { host: 'localhost', 'content-type': 'application/json' },
+        body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'tools/list' })
+      }),
+      res
+    );
+
+    expect(res.statusCode).to.equal(400);
+    expect(expectJson<JsonRpcResponse>(res.body).error?.message)
+      .to.contain('No valid session ID');
+  });
+
+  it('should reject non-POST requests in stateless mode', async () => {
+    const server = new McpHttpServer(
+      async () => null,
+      async () => ({ kind: 'public' }),
+      '127.0.0.1',
+      17766,
+      '/mcp',
+      'stateless',
+      {
+        resolve: () => undefined,
+        reject: error => { throw error; }
+      }
+    );
+
+    const res = new MockResponse();
+    await server.dispatch(
+      createMockRequest({
+        method: 'GET',
+        url: '/mcp',
+        headers: { host: 'localhost' }
+      }),
+      res
+    );
+
+    expect(res.statusCode).to.equal(405);
+  });
+
+  it('should attach through the main server when mcp host and port match', async () => {
+    //this exercises the free `http()` function's early return branch that
+    // hands off to attachHttpToServer instead of starting its own listener.
+    const ctx = createCtxStub({ config: { mcp: {} } });
+    ctx.on = () => undefined;
+    await startHttp(ctx as unknown as never);
+    expect(shouldAttachHttpToServer(ctx as unknown as never)).to.equal(true);
+  });
+
+  it('should start a standalone listener and resolve once shut down when mcp is on its own port', async function () {
+    this.timeout(10000);
+
+    let captured: InstanceType<typeof McpHttpServer> | undefined;
+    const originalStart = McpHttpServer.prototype.start;
+    McpHttpServer.prototype.start = async function (this: InstanceType<typeof McpHttpServer>) {
+      captured = this;
+      return originalStart.call(this);
+    };
+
+    try {
+      const ctx = createCtxStub({
+        config: {
+          mcp: {},
+          'mcp.host': '127.0.0.1',
+          'mcp.port': 0,
+          'server.host': '127.0.0.1',
+          'server.port': 3000
+        }
+      });
+      ctx.registered.mcp = makeRealFactory();
+
+      const pending = startHttp(ctx as unknown as never);
+      //give the listener a tick to bind before shutting it down
+      await new Promise(resolve => setTimeout(resolve, 25));
+      expect(captured).to.exist;
+
+      await captured!.shutdown();
+      await pending;
+    } finally {
+      McpHttpServer.prototype.start = originalStart;
+    }
+  });
+
+  it('should only attach the http request handler once per server', () => {
+    const ctx = makeAttachCtx({ 'mcp.route': '/mcp' });
+    attachHttpToServer(ctx as never);
+    const first = ctx.listener();
+    attachHttpToServer(ctx as never);
+    const second = ctx.listener();
+
+    expect(second).to.equal(first);
+  });
+
+  it('should ignore attached requests whose resource is not a Node request/response pair', async () => {
+    const ctx = makeAttachCtx({ 'mcp.route': '/mcp' });
+    attachHttpToServer(ctx as never);
+    const listener = ctx.listener();
+
+    const result = await listener!({
+      req: { data() { return {}; }, resource: {} },
+      res: { resource: makeAttachedResponse(), stop() {} }
+    });
+
+    expect(result).to.equal(undefined);
+  });
+
+  it('should ignore attached requests that do not match the mcp method or path', async () => {
+    const ctx = makeAttachCtx({ 'mcp.route': '/mcp' });
+    attachHttpToServer(ctx as never);
+    const listener = ctx.listener();
+
+    const result = await listener!({
+      req: {
+        data() { return {}; },
+        resource: makeAttachedRequest({
+          method: 'GET',
+          url: '/not-mcp',
+          headers: { host: 'localhost' }
+        })
+      },
+      res: { resource: makeAttachedResponse(), stop() {} }
+    });
+
+    expect(result).to.equal(undefined);
+  });
+
+  it('should parse an authorization header presented as an array of values', async () => {
+    const application = {
+      id: 'app_1',
+      name: 'App',
+      secret: 'secret-1',
+      scopes: [ 'articles.read' ],
+      active: true,
+      expires: new Date(),
+      created: new Date(),
+      updated: new Date()
+    };
+    const calls: (AuthContext | undefined)[] = [];
+    const ctx = makeAttachCtx(
+      { 'mcp.route': '/mcp' },
+      name => {
+        if (name !== 'mcp') {
+          return null as never;
+        }
+        return (async (resolved?: AuthContext) => {
+          calls.push(resolved);
+          return null;
+        }) as never;
+      }
+    );
+    const applicationCtx = {
+      resolve<T = unknown>(event: string) {
+        if (event === 'application-detail') {
+          return Promise.resolve({ results: application as T });
+        }
+        return Promise.resolve(null);
+      }
+    };
+
+    attachHttpToServer(Object.assign(ctx, applicationCtx) as never);
+    const listener = ctx.listener();
+
+    await listener!({
+      req: {
+        data() {
+          return initialize;
+        },
+        resource: makeAttachedRequest({
+          method: 'POST',
+          url: '/mcp',
+          headers: {
+            host: 'localhost',
+            authorization: [ 'Bearer app_1:secret-1' ] as unknown as string
+          }
+        })
+      },
+      res: { resource: makeAttachedResponse(), stop() {} }
+    });
+
+    expect(calls).to.have.length(1);
+    expect(calls[0]?.kind).to.equal('app');
   });
 });

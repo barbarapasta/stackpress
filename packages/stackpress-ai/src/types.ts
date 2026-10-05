@@ -4,6 +4,7 @@ import type { SSEServerTransport } from '@modelcontextprotocol/sdk/server/sse.js
 import type { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
 import type Server from '@stackpress/ingest/Server';
 import type { Application, Session } from 'stackpress-api/types';
+import type { McpOAuthConfig, OAuthIdentity } from 'stackpress-session/types';
 
 //this exported schema alias keeps config serializable while still letting the
 // package treat tool input and output contracts as JSON Schema documents.
@@ -36,11 +37,13 @@ export type McpConfig = {
   mode?: McpSessionMode,
   messages?: string,
   name?: string,
+  oauth?: McpOAuthConfig,
   port?: number,
   route?: string,
   sse?: {
     host?: string,
     key?: string,
+    oauth?: McpOAuthConfig,
     port?: number,
     route?: string
   },
@@ -82,7 +85,8 @@ export type NormalizedToolConfig = ToolConfig & {
 export type AuthContext
   = { kind: 'public' }
   | { kind: 'app', token: Token, application: Application }
-  | { kind: 'user', token: Token, session: Session };
+  | { kind: 'user', token: Token, session: Session }
+  | { kind: 'oauth', identity: OAuthIdentity };
 
 //this factory contract is what Stackpress stores under ctx.register('mcp')
 // so transports can request a fresh MCP server on demand for one resolved

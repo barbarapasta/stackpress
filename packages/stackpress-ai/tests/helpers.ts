@@ -148,6 +148,28 @@ export class MockResponse extends EventEmitter {
   }
 
   /**
+   * Mirror Node's writeHead so real SDK transports (like the SSE transport)
+   * can open a response without a live socket.
+   */
+  public writeHead(statusCode: number, headers?: Record<string, string>) {
+    this.statusCode = statusCode;
+    this.headersSent = true;
+    for (const [ name, value ] of Object.entries(headers || {})) {
+      this.setHeader(name, value);
+    }
+    return this;
+  }
+
+  /**
+   * Mirror Node's write so long-lived streaming responses (like SSE) can
+   * append chunks without ending the response.
+   */
+  public write(chunk: string) {
+    this.body += chunk;
+    return true;
+  }
+
+  /**
    * Finish the response and emit the close event for cleanup hooks.
    */
   public end(body = '') {

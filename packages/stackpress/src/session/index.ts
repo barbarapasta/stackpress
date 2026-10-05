@@ -19,7 +19,24 @@ export type {
   Auth,
   AuthExtended,
   AuthInput,
-  ProfileAuth
+  ProfileAuth,
+  OAuthSessionConfig,
+  NormalizedOAuthSessionConfig,
+  OAuthResourceConfig,
+  OAuthScopeConfig,
+  OAuthPolicyConfig,
+  McpOAuthConfig,
+  ApiOAuthEndpointConfig,
+  OAuthIdentity,
+  OAuthCredential,
+  OAuthApprovalPolicyInput,
+  OAuthApprovalPolicyResult,
+  OAuthAccessPolicyInput,
+  OAuthAccessPolicyResult,
+  OAuthApiOperationDescriptor,
+  OAuthMcpResourceDescriptor,
+  OAuthService,
+  OAuthPlugin
 } from './types.js';
 
 export {

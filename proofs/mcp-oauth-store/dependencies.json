@@ -1,0 +1,15 @@
+{
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "@stackpress/inquire": "0.10.8",
+    "@stackpress/inquire-pglite": "0.10.8",
+    "@stackpress/inquire-pg": "0.10.8",
+    "@stackpress/inquire-mysql2": "0.10.8",
+    "@stackpress/inquire-sqlite3": "0.10.8",
+    "@electric-sql/pglite": "0.3.14",
+    "pg": "8.16.3",
+    "mysql2": "3.15.3",
+    "better-sqlite3": "12.4.1"
+  }
+}

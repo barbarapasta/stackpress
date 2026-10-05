@@ -8,7 +8,7 @@ import type {
   ViewConfig 
 } from 'stackpress-view/types';
 //stackpress-session
-import type { Profile } from 'stackpress-session/types';
+import type { ApiOAuthEndpointConfig, Profile } from 'stackpress-session/types';
 
 export type ApiType = 'public' | 'app' | 'session';
 
@@ -56,7 +56,12 @@ export type ApiEndpoint = {
   cors?: boolean|string|string[],
   event: string,
   priority?: number,
-  data: Record<string, Data>
+  data: Record<string, Data>,
+  //only valid on an existing `type: 'session'` route; explicit
+  //per-route opt-in under Q-012, never inferred from a global setting.
+  //`true` is accepted here only so misconfiguration is rejected with a
+  //clear error instead of a type error; membership must be explicit.
+  oauth?: ApiOAuthEndpointConfig | boolean
 };
 
 export type ApiScope = {

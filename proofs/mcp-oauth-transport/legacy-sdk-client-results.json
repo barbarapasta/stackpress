@@ -1,0 +1,36 @@
+{
+  "node": "v22.23.2",
+  "sdk": "1.29.0",
+  "ingest": "0.10.8",
+  "checks": [
+    {
+      "name": "anonymous mixed tools",
+      "result": "initialize and public call do not login; protected call triggers SDK authorization URL with resource and S256"
+    },
+    {
+      "name": "approval continuation",
+      "result": "SDK code exchange and retry succeed on previously anonymous session"
+    },
+    {
+      "name": "automatic renewal",
+      "result": "HTTP401 causes SDK refresh and automatic retry; approval identity stays the same"
+    },
+    {
+      "name": "automatic permission escalation with refresh token",
+      "result": "SDK limitation reproduced",
+      "observation": "older SSE client does not handle403 for OAuth; no approval opens"
+    },
+    {
+      "name": "explicit client permission recovery",
+      "result": "client explicitly calls SDK auth helper after discarding refresh credential"
+    },
+    {
+      "name": "disconnect",
+      "result": "revoked key denied; failed refresh starts approval again, no protected effect"
+    },
+    {
+      "name": "resource binding",
+      "result": "SDK sends exact MCP resource on every tested exchange and renewal"
+    }
+  ]
+}

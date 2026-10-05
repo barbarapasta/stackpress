@@ -8,10 +8,13 @@ import type Server from '@stackpress/ingest/Server';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import type { AnySchema } from '@modelcontextprotocol/sdk/server/zod-compat.js';
 import { fromJSONSchema } from 'zod';
+//stackpress-session
+import type { OAuthPlugin } from 'stackpress-session/types';
 //client
 import type {
   AuthContext,
   ClientPlugin,
+  McpConfig,
   NormalizedToolConfig,
   ToolConfig,
   ToolResolverServer
@@ -116,11 +119,45 @@ export function registerCallTools(
 }
 
 /**
+ * Register trusted OAuth resource declarations for the configured
+ * standalone/attached MCP and SSE listeners. This only records the
+ * route/resource membership that finalize() checks for collisions; it
+ * does not attach any per-request verification, which arrives once
+ * session's runtime capabilities are built.
+ */
+export function registerOAuthResources(ctx: Server) {
+  const config = ctx.config.get<McpConfig>('mcp') || {};
+  if (!config.oauth && !config.sse?.oauth) return;
+  const oauth = ctx.plugin<OAuthPlugin>('oauth');
+  if (!oauth) {
+    throw new Error('mcp.oauth requires session.oauth to be configured');
+  }
+  if (config.oauth) {
+    oauth.registerMcpResource({
+      surface: 'mcp',
+      route: ctx.config.path('mcp.route', '/mcp'),
+      resource: config.oauth.resource
+    });
+  }
+  if (config.sse?.oauth) {
+    oauth.registerMcpResource({
+      surface: 'sse',
+      route: ctx.config.path('mcp.sse.route', '/sse'),
+      resource: config.sse.oauth.resource
+    });
+  }
+}
+
+/**
  * Register the MCP factory and transport events with Stackpress.
  */
 export default function plugin(ctx: Server) {
   //if no MCP config, skip registering the plugin
   if (!ctx.config.has('mcp')) return;
+
+  ctx.on('route', ({ ctx }) => {
+    registerOAuthResources(ctx);
+  });
 
   ctx.on('listen', async ({ ctx }) => {
     //load the generated client tools if the client package already exists

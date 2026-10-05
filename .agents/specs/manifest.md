@@ -7,3 +7,4 @@ This manifest routes active `.agents/specs/` packages.
 | [00001-stackpress-kb-population](00001-stackpress-kb-population/index.md) | Frozen | Using the accepted source-backed KB and document-level parity records. |
 | [00002-stackpress-contributor-guide](00002-stackpress-contributor-guide/index.md) | Frozen | Using the accepted contributor model, exact placement rules, generator/aggregate contracts, and verified KB promotion. |
 | [00003-repository-metadata-cleanup](00003-repository-metadata-cleanup/index.md) | Frozen; implementation completed | Correcting stale root package guidance and confirmed manifest/export drift without overlapping SQL-helper or coverage work. |
+| [00004-mcp-native-oauth](00004-mcp-native-oauth/index.md) | Frozen; implementation plan accepted, tasks open | Planning shared client login for session, AI, and API: package responsibilities, existing apps, and required tests. |

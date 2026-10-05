@@ -16,6 +16,13 @@ Do not use this workflow before Freeze unless the user explicitly asks to draft 
 7. `.agents/specs/<spec-id>/status.md`
 8. relevant spec records, task files, project files, and user instructions
 
+Whenever this workflow creates an Agent Document, apply the [Agent File Creation Workflow](agent-file-creation.md). Whenever it changes an existing Agent Document, apply the [Agent File Update Workflow](agent-file-update.md). Complete content before applying line thresholds.
+
+When the user asks an agent to perform acceptance on their behalf, use the
+[Spec Task Acceptance Workflow](spec-task-acceptance.md) after task
+verification. Do not infer Delegated Acceptance from an ordinary request to
+implement or verify a task.
+
 Do not load unrelated spec folders unless the current spec explicitly links to them or the user asks for cross-spec implementation planning.
 
 ## Status Model
@@ -32,72 +39,60 @@ Track task status in `.agents/specs/<spec-id>/tasks/status.md`:
 - `open`: user approved and task is opened to be worked on.
 - `started`: task has been started.
 - `verified`: task has been verified.
-- `accepted`: user has accepted the task implementation.
+- `accepted`: the task's Acceptance Criteria passed through explicit user acceptance or explicitly Delegated Acceptance with recorded evidence.
 
 Do not invent additional status values unless the user asks for them. When work cannot continue, keep the task at its current status and record the blocker and next action in the task file.
 
 ## 1. Propose Implementation Plan
-
-Separate validation from acceptance when writing a sprint or task:
-
-- **Validation** is technical evidence produced by tests, builds, type checks,
-  linting, imports, package inspection, automated browser checks, or other
-  machine-verifiable checks.
-- **Acceptance** is an output a human can visually or experientially review
-  without reviewing source code or interpreting automated test results. Examples
-  include a rendered interface, readable document, screenshot, recording,
-  visible command behavior, or other directly inspectable result.
-- If a task has no meaningful human-reviewable output, record
-  `Acceptance: not applicable` with a short reason. Do not relabel validation as
-  acceptance merely to give every task an acceptance criterion.
 
 1. Confirm the spec is Frozen or that the user wants an early implementation plan.
 2. Create `.agents/specs/<spec-id>/tasks/` if it is absent.
 3. Create or update `.agents/specs/<spec-id>/tasks/sprint.md`.
 4. Add or update an implementation status tracker in `.agents/specs/<spec-id>/status.md` with status `proposed`.
 5. Draft a maintainability-first implementation process in `tasks/sprint.md`.
-6. Include task summaries, ordering rationale, verification process, and acceptance criteria.
+6. Include task summaries, ordering rationale, verification process, and acceptance criteria. Write `Acceptance criteria: none` when the task has no human-reviewable visual output.
 7. Report the proposed plan to the user and ask for adjustments before creating final task files.
 
 Use this planning rubric to design the sequence. Omit, merge, or rename layers that do not apply to the actual technical implementation, but state the reason in `tasks/sprint.md`. For each applicable layer, define planned outputs, relevant examples, verification process, and acceptance criteria.
 
+Acceptance criteria require a visual artifact or state the user can review, such as a rendered interface, document, diagram, image, report, or workflow. Code review, source inspection, tests, static checks, logs, and machine-readable output are validation. Do not invent an acceptance artifact. When no visual review applies, write `Acceptance criteria: none`; the task can finish at `verified`.
+
 1. Determine or create a reusable foundation layer.
    - Examples: templating, state management, resources, assets, icons, shared utilities, data contracts, interfaces, model types, or configuration.
-   - Verification: unit tests where applicable.
-   - Acceptance: a human-reviewable sample or document when one exists;
-     otherwise, not applicable with a reason.
+   - Verification: unit tests and focused code review where applicable.
+   - Acceptance: code review, or explicit user abstention from review.
 2. Determine or create a temporary placeholder layer.
    - Examples: text examples, sample images, sample code, fixtures, fake endpoints, mocked providers, test doubles, or scaffold data.
    - Verification: none unless placeholders affect runtime behavior, tests, or user-visible outputs.
-   - Acceptance: none unless placeholders are user-visible or change expected behavior.
+   - Acceptance: none unless placeholders produce or alter a relevant visual output.
 3. Determine or create reusable front end components or reusable technical units.
    - Examples: accordions, alerts, badges, breadcrumbs, buttons, cards, dialogs, popovers, form fields, heroes, loaders, notifiers, pagination, tables, tabs, trees, tooltips, command surfaces, service modules, domain modules, or adapters.
    - Verification: where applicable, unit tests, browser inspection, screenshots, recordings, contract tests, or sample command output.
-   - Acceptance: sample front end views with all relevant components, or equivalent sample outputs proving the reusable units work.
+   - Acceptance: a rendered sample showing the relevant visual components; otherwise none.
 4. Determine or create reusable front end layouts or composition structures.
    - Examples: header, footer, left or right asides, menus, grids, panels, routing shells, orchestration boundaries, integration shells, or module composition.
    - Verification: where applicable, unit tests, browser inspection, screenshots, recordings, integration tests, or shell-level smoke tests.
-   - Acceptance: sample front end views with all relevant layouts, or equivalent sample outputs proving the composition works.
+   - Acceptance: a rendered sample showing the relevant visual layouts; otherwise none.
 5. Determine or create event, action, and workflow handling.
    - Examples: clicks, hover states, drag and drop, keyboard events, game controller events, state transitions, commands, jobs, queue handlers, webhooks, or domain workflows.
    - Verification: where applicable, unit tests, functional tests, browser inspection, screenshots, recordings, contract tests, or workflow smoke tests.
-   - Acceptance: sample front end views with all interaction points, or equivalent sample outputs proving the actions and workflows work.
+   - Acceptance: a rendered view or recording showing the relevant interaction states; otherwise none.
 6. Develop the primary outputs using the reusable layers.
    - Examples: front end screens/pages, API behavior, CLI behavior, background jobs, integrations, reports, exports, or automation flows.
    - Verification: where applicable, unit tests, functional tests, browser inspection, screenshots, recordings, integration tests, or end-to-end smoke tests.
-   - Acceptance: actual front end views or equivalent primary outputs that match the Frozen spec.
+   - Acceptance: the rendered visual output reviewed against the Frozen spec; otherwise none.
 7. Develop placeholders for external systems, back end endpoints, storage, providers, or expensive dependencies, and connect them to the primary outputs.
    - Examples: endpoint placeholders, repository stubs, storage adapters, payment/provider fakes, service mocks, or fixture-backed integrations.
    - Verification: where applicable, unit tests, functional tests, browser inspection, screenshots, recordings, contract tests, or integration smoke tests.
-   - Acceptance: the same accepted outputs from layer 6 continue to work against placeholders.
+   - Acceptance: repeat the layer 6 visual review against placeholders; otherwise none.
 8. Replace placeholders one by one with actual logic while deprecating the placeholder layer.
    - Examples: real endpoints, real persistence, real provider integrations, real validation, real permissions, or real background processing.
    - Verification: where applicable, unit tests, functional tests, browser inspection, screenshots, recordings, contract tests, integration tests, or end-to-end smoke tests.
-   - Acceptance: the same accepted outputs from layer 6 continue to work with real logic.
+   - Acceptance: repeat the layer 6 visual review with real logic; otherwise none.
 9. Refactor code for maintainable boundaries.
    - Examples: abstraction, reusability, separation of responsibility, plugin patterns, event-driven boundaries, model layers, database layers, provider adapters, naming, and testability.
    - Verification: where applicable, unit tests, functional tests, browser inspection, screenshots, recordings, integration tests, static checks, or focused code review.
-   - Acceptance: the same accepted outputs from layer 6 continue to work after refactor.
+   - Acceptance: repeat the layer 6 visual review after refactoring; otherwise none.
 
 ## 2. Accept Implementation Plan
 
@@ -121,6 +116,8 @@ Each task file must include:
 
 Do not create empty placeholder task files for tasks that are not part of the accepted plan.
 
+Keep verification and acceptance separate. Name the visual artifact or state and what the user should review. Otherwise write `Acceptance criteria: none` and briefly explain why in the acceptance notes.
+
 ## 3. Implement Tasks
 
 For each task:
@@ -131,10 +128,10 @@ For each task:
 4. Run the task verification process.
 5. If verification fails, fix the issue or ask the user when a decision is needed, then repeat verification.
 6. When verification passes, update `tasks/status.md` task status to `verified`.
-7. Report the acceptance criteria and verification result to the user.
-8. When the user accepts the implementation, update `tasks/status.md` task status to `accepted`.
+7. Report the verification result and either present the visual acceptance artifact for user review, invoke the Spec Task Acceptance Workflow when the user delegated acceptance, or state that the task has no acceptance criteria.
+8. When acceptance criteria exist, update `tasks/status.md` to `accepted` only after the user explicitly accepts the implementation or Delegated Acceptance passes every criterion with recorded evidence.
 
-Keep the task at `started` until verification passes. Do not mark a task `accepted` without user acceptance.
+Keep the task at `started` until verification passes. A task with `Acceptance criteria: none` finishes at `verified`. Do not mark a task `accepted` without explicit user acceptance or explicit delegation followed by a complete passing acceptance result. Human-required, blocked, failed, or unrun criteria keep the task at `verified`.
 
 ## 4. Side Quests
 
@@ -152,7 +149,7 @@ Use the parent task number plus letters for side quests. Keep each side quest sc
 
 ## 5. Complete Implementation
 
-When every task and side quest is `accepted`:
+When every task and side quest is `accepted`, or is `verified` with `Acceptance criteria: none`:
 
 1. Update `.agents/specs/<spec-id>/status.md` implementation status to `completed`.
 2. Run a context promotion review for implementation-discovered facts that are accepted, reusable, and useful beyond this spec.
@@ -161,5 +158,5 @@ When every task and side quest is `accepted`:
 
 ## Handoff
 
-End each implementation pass by stating the spec ID, implementation status, current task statuses, files changed, verification performed, user acceptance still needed, context promotion performed or skipped, validation result, recommended next step, and any useful alternatives.
+End each implementation pass by stating the spec ID, implementation status, current task statuses, files changed, verification performed, visual artifact available for acceptance or `Acceptance criteria: none`, acceptance mode and any human input still needed, context promotion performed or skipped, validation result, recommended next step, and any useful alternatives.
 <!-- agent-workspace-rules:end -->
