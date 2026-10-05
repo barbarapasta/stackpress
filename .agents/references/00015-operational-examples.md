@@ -132,12 +132,35 @@ const found = await ctx.resolve('article-search', {
 ```
 
 Generated event names and payloads are internal capabilities. Expose them through
-pages/API/MCP only with explicit authorization and input policy.
+pages/API/MCP/agent only with explicit authorization and input policy.
 
 ## Expose Capabilities Through Interfaces
 
 Load [Interface Exposure Examples](./00017-interface-exposure-examples.md) for
-handwritten handler/view pairs and API/MCP adapters over the same event.
+handwritten handler/view pairs, API/MCP adapters, and agent-offered tools over
+the same event.
+
+## Enable The Built-In Agent
+
+Pattern from the blog template; replace names with the app's. Demonstrated on
+the template only, not a production application or hosting platform.
+
+1. List `stackpress-ai` in `package.json.plugins` after `stackpress`, and install
+   the SDK of each provider used (`@anthropic-ai/sdk`, `openai`, also for OpenRouter).
+2. Add `use "stackpress-ai/schema.idea"` to the Idea file, then `generate` and
+   `push` (back up first; four `agent_*` tables are added).
+3. Add an `agent` section (provider key variable names, `model`, `models`,
+   optional `limit`/`approvalTtl`) to every environment config that lists its
+   sections by hand, and export the keys in the environment.
+4. Allow `/agent/**` in `session.access` for the roles that may chat, and load the
+   `csrf` plugin: chat writes are refused without it.
+5. Contribute tools from a plugin's `ai-tools` listener with `agent: true`, a
+   `type` and `scopes`, and an `inverse` or `irreversible` for writes.
+6. Mount `AgentPanel` from `stackpress-ai/client` and add
+   `stackpress-ai/styles.css` to `view.engine.cssFiles`.
+
+Verify signed-out and no-key refusals, a reversible action with undo, an
+approval, the daily limit, and the app event's own refusal.
 
 ## Build And Preview
 
@@ -162,7 +185,7 @@ config. Development HMR uses Node HTTP native resources.
 4. Run `migrate` to inspect SQL without applying it.
 5. Back up the target database.
 6. Run `push`/`upgrade` against the expected adjacent state.
-7. Verify schema, data, routes/events, and affected UI/API/MCP paths.
+7. Verify schema, data, routes/events, and affected UI/API/MCP/agent paths.
 
 Ambiguous rename candidates fail safe during live upgrade. `--force` accepts
 the generic destructive diff; it is not a rename hint. `migrate` instead writes

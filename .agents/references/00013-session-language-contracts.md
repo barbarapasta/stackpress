@@ -171,6 +171,14 @@ Changing source wording changes translation keys. Browser `changeLanguage`
 changes provider state only; Stackpress `LayoutUser` currently calls it without
 translation maps, so server persistence/request reload is a separate concern.
 
+## Acting As A Session Holder
+
+Code that acts for a signed-in person, such as the built-in AI agent, derives the
+person from `Session.load(req).data()` and nothing else; a null result is no
+person. Because `token(req)` reads only the request's session entry, an event
+called on the person's behalf must receive a new request carrying that session
+data ([AI Tools, Callers, And MCP Access](00019-ai-tools-callers-and-mcp-access.md)).
+
 ## Security Boundaries
 
 - Replace default seeds and protect them as secrets.

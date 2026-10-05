@@ -30,7 +30,10 @@ runtime consumer, fallback, and compatibility boundary.
 
 ## Generation Lifecycle
 
-1. Parse and compose the application Idea, including package schemas.
+1. Parse and compose the application Idea, including package schemas added with
+   `use` (`stackpress-session` and `stackpress-ai` ship one). A package schema's
+   generated events are application-callable, so a package that needs them
+   protected must guard them itself.
 2. Create a shared ts-morph project at the configured client output.
 3. Resolve `idea`; enabled packages append their transforms.
 4. Run transforms sequentially against the same project.

@@ -60,7 +60,7 @@ Utility packages:
  - `packages/stackpress-csrf` for CSRF checks
  - `packages/stackpress-email` for generic email-send events
  - `packages/stackpress-language` for i18n translation methods
- - `packages/stackpress-ai` for Stackpress MCP server support, including tool registry assembly, transport entrypoints, and AI-facing Stackpress integration
+ - `packages/stackpress-ai` for AI-facing Stackpress integration: the MCP server (tool registry, transports, key checks), plugin-contributed tools, and a built-in chat agent with approval, undo, stored records, chat routes, and a browser panel; it is loaded by name, not through the aggregate
 
 Endpoint plugins:
 

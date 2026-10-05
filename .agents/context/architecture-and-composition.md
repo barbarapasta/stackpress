@@ -47,7 +47,9 @@ resolves `idea` before running transforms.
 
 The aggregate Stackpress plugin registers server, schema, language, CSRF, SQL,
 view, session, API, and admin in explicit order. AI and desktop are optional
-packages loaded separately when configured.
+packages loaded separately when configured. The AI package carries an MCP
+server, a built-in agent runtime, shipped records, and a browser panel; it
+activates when `mcp` or `agent` config exists.
 
 Default aggregate inclusion is reserved for commonly used capabilities that can
 apply across most web, mobile, and desktop cases. Explicit web-only, mobile-only,
@@ -74,7 +76,8 @@ Named events provide the internal invocation protocol for:
 - generated model operations;
 - auth, email, webhooks, and application workflows;
 - API, MCP, CLI, page, and desktop adaptation;
-- plugin contribution registries.
+- plugin contribution registries, such as `ai-tools` for tools offered to MCP
+  callers and the built-in agent.
 
 Events share request, response, status, ordering, and cooperative control-flow
 semantics. They do not automatically provide caller authorization, a transaction,

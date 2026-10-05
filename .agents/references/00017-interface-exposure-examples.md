@@ -1,7 +1,7 @@
 # Interface Exposure Examples
 
 Use these recipes to expose an existing Stackpress event through a handwritten
-page, configured API endpoint, or MCP tool. The event remains capability
+page, configured API endpoint, MCP tool, or the built-in AI agent. The event remains capability
 authority; each interface adds its own input, identity, and output contract.
 
 ## Handwritten Page And View
@@ -108,28 +108,67 @@ mcp: {
 }
 ```
 
-Load `stackpress-ai` explicitly. It activates only when `mcp` config exists,
-normalizes tools, converts JSON Schema to runtime validation, filters listing and
-calls by `public`/`app`/`user` identity and scopes, merges fixed/caller/auth data,
-then resolves the event. Plugin-mode generated tools attach their resolver events
-from the generated client during `listen`.
+Load `stackpress-ai` explicitly. It activates when `mcp` or `agent` config
+exists. Each registry build merges tools contributed by plugins (below) with
+`mcp.tools` by name, normalizes them, converts JSON Schema to runtime
+validation, filters listing and calls by `public`/`app`/`user` identity and
+scopes, then runs the event through the one shared execution path. A tool's
+`type` defaults to `public`: set `type` and `scopes` on every write.
 
-Verify tool listing and calls for every identity class, invalid JSON Schema
-payloads, scope denial, fixed-data precedence, target event authorization,
-status/error conversion, stateful session reuse or stateless isolation, and
-transport shutdown. MCP edge policy does not make the event safe on other edges.
+A presented key must be known, active, unexpired, and secret-matching on every
+method, and a tool needs every listed scope. A refused key answers `401`, never
+public access. A call to a registered tool the caller lacks answers `403`. A
+valid caller that sees no tools gets an empty list. A live session ends when
+its key dies. stdio is unfiltered local use. Key checks do not make the event
+safe on other edges.
+
+A plugin can contribute the same tool without touching config:
+
+```ts
+import { contributeTool } from 'stackpress-ai';
+
+server.on('listen', ({ ctx }) => {
+  ctx.on('ai-tools', ({ ctx }) => contributeTool(ctx, {
+    name: 'article_search', type: 'user', scopes: [ 'articles.read' ],
+    method: 'GET', event: 'article-search'
+  }));
+});
+```
+
+The event reads who is calling with `caller(req)` (`public`, `app`, `user`, or
+`person`), a record kept apart from input; input cannot set `profileId`,
+`applicationId`, or `sessionId`. Resolve the event with a request, not plain
+data, wherever its caller comes from the session.
+
+Verify tool listing and calls for every identity class including a key that is
+unknown, inactive, expired, or lacking its secret; scope denial and the empty
+list; invalid payloads; fixed-data precedence; target event authorization; a
+failed event reported as an error; stateful session reuse or stateless
+isolation; and transport shutdown.
+
+## The Built-In Agent Over The Same Event
+
+Mark a tool `agent: true` to offer it to the built-in agent, which acts as the
+signed-in person. The agent reads neither `type` nor `scopes` for that person,
+so the event must authorize. A write with no `inverse` waits for the person's
+approval (declare `irreversible: true` to say so); a tool with an `inverse` runs
+at once and shows Undo, and the inverse's event can read `undoing(req)`. Verify
+the event as a signed-in user and as a refused one, the approval and undo
+paths, a repeated click, and that the person's own access still decides.
+Agent config, approval, and records are in
+[AI Agent Runtime, Records, And Panel](00020-ai-agent-runtime-records-and-panel.md).
 
 ## Cross-Surface Consistency
 
-When one event is exposed through pages, API, and MCP, compare:
+When one event is exposed through pages, API, MCP, and the agent, compare:
 
-| Concern | Page | API | MCP |
-| --- | --- | --- | --- |
-| identity | session/request guard | public/app/session token | public/app/user auth context |
-| validation | handler/generated action | endpoint + event | JSON Schema + event |
-| output | SSR snapshot/HTML | HTTP status/JSON | MCP tool result text/schema |
-| errors | error event/view | status envelope | tool error/result conversion |
-| policy | route permissions | endpoint scopes | tool visibility/scopes |
+| Concern | Page | API | MCP | Built-in agent |
+| --- | --- | --- | --- | --- |
+| identity | session/request guard | public/app/session token | public/app/user key, verified every request | signed-in session only |
+| validation | handler/generated action | endpoint + event | JSON Schema + event | JSON Schema + event |
+| output | SSR snapshot/HTML | HTTP status/JSON | MCP tool result text/schema | progress events, stored thread |
+| errors | error event/view | status envelope | `401`/`403`, tool error result | fixed text; app refusal shown on the action |
+| policy | route permissions | endpoint scopes | tool visibility/scopes | `agent: true`, approval, daily limit, the event |
 
 Do not assume these policies are synchronized automatically. Reuse the event for
 mechanism, then test each adapter's caller and protocol contract independently.
@@ -137,6 +176,6 @@ mechanism, then test each adapter's caller and protocol contract independently.
 ## Source Anchors And Authority
 
 Anchors: maintained blog/store app handlers/views, API plugin endpoint adapters,
-AI tool normalization/registration/transports, view rendering contract, session
-authorization, and generated model events. Examples demonstrate current paths;
+AI tool registry/execution/transports and agent runtime, view rendering
+contract, session authorization, and generated model events. Examples demonstrate current paths;
 owning source contracts remain authority.

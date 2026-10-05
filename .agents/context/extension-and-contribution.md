@@ -91,7 +91,7 @@ behavior.
 | `listen` | reusable operations and generated listeners |
 | `route` | request routes after capabilities exist |
 | `idea` | package-owned transforms |
-| package contribution event | extensible registry input before initialization |
+| package contribution event | extensible registry input before initialization, such as `ai-tools`, resolved each time the registry is built |
 
 Package compilation, Idea generation, Reactus application build, plugin
 bootstrap, lifecycle initialization, operational events, and request/render
@@ -126,7 +126,7 @@ classification, release sequencing, and verification.
 | generated/runtime pair | generated compile/import and lifecycle registration |
 | data | dialect query assertions and transactional workflow proof |
 | page/view | route, SSR/hydration/interaction/snapshot, plus owning package tests above 90% or app suite |
-| access surface | auth, validation, event invocation, status/error mapping |
+| access surface | auth, validation, event invocation, status/error mapping; for the AI agent also approval, undo, and a refused signed-out request |
 | adapter | native integration and target-specific test |
 | public export/manifest | CJS/ESM/types, pack/import, plus exporting and consuming package tests above 90% |
 | scaffold/skill | clean copy/install acceptance and current command workflow |
@@ -146,6 +146,9 @@ covers only server, schema, and SQL, so run other owning package suites directly
 - Keep build-time-only code, especially transforms and artifact-building scripts,
   out of runtime import paths. Runtime-safe helpers may be reused by build-time
   code.
+- Event listeners that need a caller's session must receive a request built with
+  it; plain data carries none.
+- Avoid `:` in event names, which Ingest reads as a pattern.
 - Keep server-only code out of browser-safe entrypoints. Shared or browser-safe
   code may be reused by server code.
 - Treat lifecycle priority and transform order as compatibility-sensitive.

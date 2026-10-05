@@ -2,7 +2,7 @@
 
 Load this reference for document-level details about `Request`, `Response`,
 `Router`, and `Server`. Authority: current sibling Ingest/lib design intent;
-Stackpress consumes the corresponding `0.10.7` packages in this checkout.
+Stackpress consumes the corresponding `0.10.8` packages in this checkout.
 
 ## Request
 
@@ -121,7 +121,10 @@ use(router): this
 mount(...decoratedControllers): this
 ```
 
-Plain object request input to `resolve()` becomes `request({data: input})`.
+Plain object request input to `resolve()` becomes `request({data: input})`, a
+request with no session; pass a `Request` built with `request({ data,
+session, url })` to an event that reads its caller from the session. `resolve()`
+returns the response status shape, and a response nobody answered has code `0`.
 Route resolution converts method/path to an uppercase event name. Missing events
 return `Status.NOT_FOUND`. Route params and positional expression args are merged
 into `req.data`. Returning `false` from an action cooperatively stops the queue.

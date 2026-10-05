@@ -130,6 +130,10 @@ buffers, byte arrays, Node streams, and Web streams pass through. Objects and
 arrays become the standard JSON envelope with `code`, `status`, `results`,
 errors, optional total, and stack. A status-only response uses the error envelope.
 
+A route streams by setting a stream body (`res.set('text/event-stream', stream,
+200)`); the Node adapter pipes it to the response. Streaming was exercised only
+through that adapter on the blog template; a buffering host was not tried.
+
 ## WHATWG Adapter
 
 Native aliases are `NodeRequest = globalThis.Request` and

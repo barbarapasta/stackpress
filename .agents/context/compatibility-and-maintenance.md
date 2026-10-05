@@ -67,7 +67,8 @@ Source provenance: [project-owner release policy](../resources/2026-07-14-coordi
 | database | revision history differs from applied schema |
 | view snapshot | props fail serialization or expose unsafe data |
 | adapter | host or dialect behavior differs |
-| surface policy | API, MCP, page, and CLI contracts diverge |
+| surface policy | API, MCP, agent, page, and CLI contracts diverge |
+| shipped records | a package `schema.idea`, its generated events, and their guards disagree |
 | workflow | scaffold or skill assumes old structure/commands |
 
 ## Current Safety Signals
@@ -81,7 +82,9 @@ Source provenance: [project-owner release policy](../resources/2026-07-14-coordi
 - ambiguous rename candidates block the live-upgrade path unless explicitly
   forced, while migration generation writes reviewable raw SQL;
 - package tests, template workflows, and skill installer tests cover selected
-  contracts.
+  contracts;
+- `stackpress-ai` pins its public import list with a surface test and guards its
+  generated record events at higher priority than the generated listeners.
 
 These checks do not form a universal compatibility handshake.
 
@@ -92,6 +95,42 @@ These checks do not form a universal compatibility handshake.
 - Every changed package should pass tests above 90% coverage for new work, but
   current package coverage and root orchestration do not yet enforce that target.
 - Root `yarn test` currently exercises server, schema, and SQL only.
+- Root `yarn build` runs `ai` after `api` because `ai` imports `stackpress-api`
+  types; build order is hand-maintained in the root manifest.
+- `stackpress-ai` provider and storage evidence is partial: Anthropic and OpenAI
+  ran only against canned replies and only OpenRouter ran live; store
+  concurrency ran on the in-memory PGlite database only; the panel and routes ran
+  against the blog template, not a production application or hosting platform.
+
+## Known Defects And Pitfalls
+
+Source-confirmed in this checkout; do not copy, and route repairs separately:
+
+- CJS plugin entries of `stackpress-ai`, `-schema`, `-sql`, `-view`, `-admin`
+  cannot be loaded by plain Node: `src/plugin.ts` reads `import.meta.url` and
+  `tsc` keeps it in `cjs/plugin.js` (`Cannot use 'import.meta' outside a module`).
+- Ingest reads `:name` in an event name as a pattern
+  (`@stackpress/lib` `ExpressEmitter`), so `blog:desktop-open-latest-posts` in
+  `templates/blog/plugins/app/plugin.ts` also answers `blog-site-info`.
+- Generated select columns are named by the relation field while the join uses
+  the related table name (`stackpress-sql/src/transform/store/select.ts`), so a
+  relation named differently from its table is expected to break generated
+  lists. Confirmed by reading; not re-run.
+- The generated `update` reads rows, merges, then writes with only ids as its
+  filter (`stackpress-sql/src/transform/actions/update.ts`), so it cannot be a
+  guarded compare-and-set; generated JSON inputs are typed object-only
+  (`actions/create.ts`).
+- `frui` 0.2.9 imports `react-shiki` in `esm/view/Code.js` but lists it only in
+  `devDependencies`; the blog template lists it itself.
+- The blog's error page renders `@/plugins/app/views/error`, which no
+  `server.view` call registers, and the build only builds registered views
+  (`stackpress-view/src/scripts/build.ts`); a production crash on any HTML
+  error was reported and not reproduced here.
+- The scaffold's `plugins/store/populate.ts` sends no phone, while `auth-signup`
+  runs `normalizePhone(input.phone)` unguarded, and its default `admin` password
+  is shorter than the scaffold's own minimum of 8.
+- MCP counts an event nobody answered (code `0`) as success, the agent as failed.
+- A live MCP session's call handlers keep the scopes captured when it opened.
 
 ## Missing Current Guarantees
 
@@ -104,6 +143,7 @@ Do not claim the framework currently provides:
 - a browser-prop allowlist or complete snapshot security policy;
 - framework-wide runtime config validation/provenance;
 - one authorization/audit descriptor across all surfaces;
+- caller propagation into nested event calls (carry a session in a new request);
 - a maintained supported-adapter matrix;
 - a package compatibility/discovery registry;
 - formal maintainer/review ownership for every public contract.

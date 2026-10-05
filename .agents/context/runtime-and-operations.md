@@ -22,7 +22,8 @@ environment variables, imports, and object spreads select:
 - generated client identity, output, revisions, and formatting;
 - database adapter, schema policy, migrations, and population plan;
 - rendering mode, Reactus paths/templates/assets, and shared props;
-- session/auth access, cookies, CSRF, API endpoints, and MCP tools;
+- session/auth access, cookies, CSRF, API endpoints, MCP tools, and the
+  built-in agent (provider key variables, models, daily limit, approval window);
 - brand, language, admin menu, email, and optional package behavior.
 
 Packages read their owned sections and implement the mechanism during lifecycle
@@ -40,7 +41,7 @@ drift detection.
 - framework operations: generate, build, push, migrate, serve, and related events;
 - generated model operations: create, detail, search, update, remove, and others;
 - domain/application operations: auth, email, webhooks, and local workflows;
-- surface/transport operations: MCP and desktop commands;
+- surface/transport operations: MCP and desktop commands and the agent events;
 - contribution registries: package-specific extension events;
 - error handling: the shared error pipeline.
 
@@ -58,6 +59,7 @@ registry is currently guaranteed.
 | migration SQL | reviewable history-derived SQL artifact |
 | database schema/data | actual live storage state |
 | population config | ordered seed event plan |
+| agent records | package-shipped threads, turns, action log, and usage, written only by the agent store |
 
 Revision history is not a database applied-migration ledger.
 

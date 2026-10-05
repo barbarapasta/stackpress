@@ -55,7 +55,7 @@ Portability is achieved at edges:
 | database | mysql2, pg, PGlite, sqlite3 connectors |
 | rendering host | native HTTP and several Reactus framework examples |
 | Stackpress entry | `stackpress/http` and `stackpress/whatwg` |
-| AI | stdio, streamable HTTP, SSE |
+| AI | MCP over stdio, streamable HTTP, SSE; chat routes with streamed events; Anthropic, OpenAI, and OpenRouter provider adapters |
 | desktop | Electron over a local Stackpress HTTP runtime |
 
 Native request, response, connection, stream, process, and build resources remain
@@ -84,6 +84,12 @@ view/data/application combination on that host.
 - database connectors have distinct native/WASM/runtime requirements;
 - desktop deliberately uses a local HTTP runtime inside Electron;
 - production rendering requires aligned generated client, page, and asset paths;
+- AI provider portability is partly proven: only OpenRouter ran live, and
+  Anthropic and OpenAI ran against canned replies only;
+- several packages' CJS plugin entries cannot be loaded by plain Node (they load
+  in the server through `tsx`); verify a CJS consumer before promising one;
+- streaming chat was exercised through the Node HTTP adapter only, not on a
+  hosting platform;
 - dialect DDL, diff, and transaction behavior can differ.
 
 ## Package-Style Distribution
@@ -92,7 +98,7 @@ Stackpress architecture is distributed through several unit types:
 
 | Unit | Carries |
 | --- | --- |
-| Idea schema | reusable domain declarations and metadata |
+| Idea schema | reusable domain declarations and metadata; a package may ship one that an app adds with `use` (session and AI do) |
 | Ingest plugin | lifecycle services, events, and routes |
 | transform | generated contract for a runtime consumer |
 | generated client | application-specific runtime registries and modules |
@@ -130,4 +136,11 @@ and portability limits across MySQL, pg, PGlite, and SQLite.
 
 Load [Exports, Types, And Generated Contracts](../references/00014-exports-types-generated-contracts.md)
 for aggregate/subpath imports, type families, package assets, generated-client
-shape and export maps, client loading, or the UnoCSS preset.
+shape and export maps, and client loading.
+
+Load [UnoCSS Preset Contract](../references/00021-unocss-preset-contract.md) for
+the `stackpress/unocss` breakpoints and rule families.
+
+Load [AI Agent Runtime, Records, And Panel](../references/00020-ai-agent-runtime-records-and-panel.md)
+for `stackpress-ai` import paths, optional peers, shipped schema and stylesheet,
+provider evidence, and the CommonJS caveat.

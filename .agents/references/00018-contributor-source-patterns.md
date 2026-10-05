@@ -19,7 +19,7 @@ semantic lane. It gives exact current locations and requirements for new work.
 | runtime commands | server | terminal, events, scripts, HTTP/WHATWG entrypoints |
 | model/generation | schema, SQL | runtime model plus events/scripts/transforms |
 | generated interface | view, admin | transforms plus component/route consumption |
-| access surface | API, AI | pages/views or transports/tools over events |
+| access surface | API, AI | pages/views or transports/tools over events; AI also carries an agent runtime, provider adapters, shipped records, and a browser entry |
 | nested domain | session | auth/profile/session subfolders with local ownership |
 | optional target | desktop | target runtime/config/events/scripts/adapters |
 | aggregate facade | stackpress | default plugin order, forwarded exports, shared assets |
@@ -58,6 +58,8 @@ generation even though all three may be called "build time."
 | generated exports | owning `src/transform/package.ts` | runtime exports and type resolution |
 | configured service | focused class/helper or `src/config/` | `config` registration and public types |
 | adapter | focused file/folder in semantic owner | target test and public subpath |
+| browser entry | owning `src/client/` plus a `./client` subpath and stylesheet | imports nothing from Node or server files; browser-safety test |
+| package-shipped records | owning `schema.idea`, listed in `files` | app `use` line; guards for generated events that must not be callable |
 | app-only behavior | app `plugins/<name>/` equivalents | app plugin list and integration |
 | aggregate composition | `packages/stackpress/src/plugin.ts` or facade source | inclusion rule and intentional order |
 
@@ -121,6 +123,9 @@ aggregate assets. Never centralize feature implementation there.
   new work.
 - Forward each symbol through the aggregate only when deliberately part of its
   facade, resolving root-name collisions explicitly.
+- Prefer an explicit `exports` list over wildcards where files are private;
+  `stackpress-ai` pins its list with a surface test and exports `schema.idea`
+  only through `files`.
 
 ## Cross-Repository Change Checklist
 
@@ -158,6 +163,11 @@ require auth, validation, event invocation, and status/error mapping.
 ## Known Exceptions And Defects
 
 - Current missing tests/coverage do not weaken the new-work target.
+- `src/plugin.ts` in `stackpress-ai`, `-schema`, `-sql`, `-view`, and `-admin`
+  reads `import.meta.url` behind a `typeof __dirname` test; `tsc` keeps it in
+  `cjs/plugin.js`, which plain Node 22 cannot parse. Plugins load through `tsx`.
+  Do not copy the pattern into new entrypoints that must load as CJS.
+- Event names with `:` are Ingest patterns; avoid them for new events.
 
 ## Current Source Anchors
 

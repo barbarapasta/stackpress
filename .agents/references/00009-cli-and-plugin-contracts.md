@@ -74,6 +74,14 @@ Other arguments remain in terminal request data. Handler aliases such as
 can be destructive. Review revisions/migrations and back up production data.
 Population has no plan-wide transaction. Raw query bypasses generated stores.
 
+The AI package also registers non-command events: `ai-tools` (a contribution
+registry; listeners call `contributeTool`, resolved each time the tool registry
+is built), eight built-in agent operations (`ai-turn`, `ai-approve`,
+`ai-decline`, `ai-undo`, `ai-threads`, `ai-thread`, `ai-start`, `ai-new`) that
+must be resolved with a request carrying a person's session, and the optional
+application-owned `ai-context`. Do not name an event with `:`, which Ingest reads
+as a pattern. See [AI Tools, Callers, And MCP Access](00019-ai-tools-callers-and-mcp-access.md).
+
 ## Idea Input Resolution
 Generation currently chooses input in this precedence: request `i`, request
 `input`, config `cli.idea`, then `<server.loader.cwd>/schema.idea`.
@@ -90,7 +98,11 @@ server -> schema -> language -> csrf -> sql -> view -> session -> api -> admin
 ```
 
 Session internally loads auth, email, then session. AI and desktop are optional
-and absent from aggregate order.
+and absent from aggregate order. The AI plugin activates when `mcp` or `agent`
+config exists; during `listen` it first registers record guards at priority
+1000 (above generated listeners at 0), then the `agent` runtime and events,
+then the MCP factory and transports, and during `route` the chat routes when
+`agent` exists. Detail: [AI Agent Runtime, Records, And Panel](00020-ai-agent-runtime-records-and-panel.md).
 
 Order matters because listeners share ordered lifecycle events:
 
@@ -122,7 +134,8 @@ export default function plugin(ctx: Server) {
 
 Use `config` for mechanisms/services, `listen` for reusable capabilities,
 `route` for HTTP exposure, and `idea` for transform contribution. Optional
-plugins often return when config is absent. Generated-client consumers use
+plugins often return when config is absent (the AI plugin when both `mcp` and
+`agent` are absent). Generated-client consumers use
 nullable loading so first bootstrap can precede generation.
 
 ## Status And Error Behavior

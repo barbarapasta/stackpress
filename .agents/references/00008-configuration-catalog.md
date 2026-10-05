@@ -20,7 +20,7 @@ export const config: Config = {
 `Config` intersects `UnknownNest` and declares common aggregate sections:
 `brand`, `terminal`, `server`, `client`, `cookie`, `admin`, `api`, `email`,
 `language`, `database`, `view`, `auth`, and `session`. Optional packages add
-sections such as `csrf`, `mcp`, and `desktop`. A type-compatible key does not
+sections such as `csrf`, `mcp`, `agent`, and `desktop`. A type-compatible key does not
 prove that its owning plugin is installed or loaded.
 
 There is no central runtime schema validation, unknown-key rejection, secret
@@ -148,26 +148,26 @@ event through another surface.
 - `csrf.name` defaults to `csrf`; `csrf.error` defaults to the package page-expiry
   message. Invalid/missing/mismatched tokens produce status 419.
 
-## Optional `mcp`
-The AI package activates only when an `mcp` section exists.
+## Optional `mcp` And `agent`
+`stackpress-ai` is loaded by name and activates when an `mcp` or an `agent`
+section exists, each half registering only for its own section.
 
-| Key | Default/effect |
-| --- | --- |
-| `name`, `title` | `'Stackpress AI Server'` |
-| `version` | current package default `'0.10.7'` |
-| `description` | optional MCP server description |
-| `host`, `port` | inherit `server.host`/`server.port` |
-| `route` | `'/mcp'` |
-| `mode` | `'stateful'`, or `'stateless'` |
-| `messages` | `'/messages'` for legacy SSE |
-| `sse` | optional host/port/route/key overrides |
-| `tools` | serializable tool definitions |
+- `mcp` configures outside AI callers: `name`, `title`, `description`, `version`
+  (a literal default in source, not the manifest version), `host`/`port`
+  (inheriting `server.*`), `route` (`'/mcp'`), `mode` (`'stateful'` or
+  `'stateless'`), `messages`, `sse`, and `tools`. Same host and port attaches to
+  the main server; otherwise a dedicated listener starts. MCP authorization does
+  not replace target event authorization.
+- `agent` configures the built-in chat agent: `providers` (environment variable
+  names, never keys), `model`, `models`, `instructions`, `limit` (tokens per
+  person per UTC day), `approvalTtl`, `steps` (default 8), and `base` (route
+  mount, default `/agent`). It also needs the package schema added to the app's
+  Idea file and `/agent/**` in `session.access`.
 
-A tool has optional `mode: event|plugin`, visibility `type: public|app|user`,
-name/title/description/method, JSON Schema input/output, required `event`, scopes,
-and fixed `data`. Same host/port attaches routes to the main server; different
-values create a dedicated listener. MCP authorization does not replace target
-event authorization.
+Load [AI Tools, Callers, And MCP Access](00019-ai-tools-callers-and-mcp-access.md)
+for the `mcp` table, tool fields, defaults, and key rules, and
+[AI Agent Runtime, Records, And Panel](00020-ai-agent-runtime-records-and-panel.md)
+for the `agent` table and its behavior.
 
 ## Optional `desktop`
 

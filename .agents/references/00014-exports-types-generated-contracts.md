@@ -47,6 +47,11 @@ by Node's `exports` map.
 The current package description still names “Incept.” Treat that as stale
 metadata, not accepted Stackpress identity or marketing language.
 
+`stackpress-ai` is outside the aggregate and publishes its own explicit export
+list with no wildcards, a stylesheet, and a shipped `schema.idea`; see
+[AI Agent Runtime, Records, And Panel](00020-ai-agent-runtime-records-and-panel.md).
+Several packages' CJS plugin entries cannot be loaded by plain Node (same file).
+
 ## Root Value Export Families
 
 | Family | Representative exports |
@@ -130,7 +135,7 @@ listener, SQL tests, and a default factory:
 The view transform adds generated field/filter/list/span/view components and
 their package subpaths. Admin adds model admin pages, views, routes, `admin.ts`,
 and augments model factories with admin routing. Optional AI adds per-model tool
-modules and root `tools` with `listen`.
+modules (`search`, `detail`, `create`, `update`) and root `tools` with `listen`.
 
 ## Generated Export Map
 
@@ -157,39 +162,13 @@ automatic version handshake or stale-output registry in the current contract.
 
 ## UnoCSS Preset
 
-```ts
-import stackpressPreset from 'stackpress/unocss';
-// presets: [stackpressPreset()]
-```
-
-The default export is a `definePreset` factory currently named
-`unocss-frui-preset`. It provides desktop-first max-width variants:
-
-| Prefix | Max width |
-| --- | --- |
-| `r4xl-` | 1920px |
-| `r3xl-` | 1536px |
-| `r2xl-` | 1280px |
-| `rxl-` | 1024px |
-| `rlg-` | 992px |
-| `rmd-` | 767px |
-| `rsm-` | 420px |
-| `rxs-` | 360px |
-
-Rule families:
-
-- `theme-*`, `theme-bg-*`, `theme-bc-*` map names or numeric theme slots to CSS variables;
-- `hex-*`, `rgb-*`, `rgba-*` provide text/background/border colors;
-- `px-*` provides exact border, margin, padding, dimensions, position, opacity,
-  z-index, line-height, flex-basis/gap, font-size, and percent-minus-pixel forms.
-
-The preset adds utilities; it does not include the exported reset or Stackpress
-stylesheet automatically. Configure UnoCSS/Vite and import required CSS files.
-Generated dynamic class strings may require explicit scanning/safelist evidence.
+Load [UnoCSS Preset Contract](00021-unocss-preset-contract.md) for
+`stackpress/unocss`, its breakpoint prefixes, rule families, and the CSS it does
+not include.
 
 ## Version And Compatibility Boundaries
 
-- Current aggregate package version is `0.10.7`; sibling dependency versions
+- Current aggregate package version is `0.10.8`; sibling dependency versions
   and peer ranges remain separate contracts.
 - An export proves availability, not a formal support promise.
 - CJS/ESM and browser/server entrypoints need independent import tests.
