@@ -27,8 +27,11 @@ changed.
 
 None in this spec. It is closed as of 2026-10-05. The pilot is separate work:
 its own spec in the Operations Approvals repository, started from the
-[pilot checklist](tasks/pilot-checklist.md), when the user asks for it. Nothing
-in this spec has been committed; that waits for the user's word.
+[pilot checklist](tasks/pilot-checklist.md), when the user asks for it. The original work was committed on `stupid-bat` with user approval. Review
+corrections authorized on 2026-10-05 are tracked in
+[task 00010B](tasks/00010B-review-corrections.md); they are built and verified,
+with the corrected result awaiting user acceptance. The user authorized committing these corrections on 2026-10-05. Nothing is
+pushed.
 
 ## Freeze Blockers
 

@@ -18,6 +18,7 @@ import {
   callTool,
   collectTools,
   contributeTool,
+  failed,
   loadRegistry,
   undoing
 } from '../src/scripts/tools.js';
@@ -294,6 +295,35 @@ describe('ai/tools', () => {
       ]);
     });
 
+    it('should answer a tool call whose event has no listener as an error', async () => {
+      const ctx = create();
+      contribute(ctx, { name: 'blog_missing', event: 'blog-missing' });
+
+      const server = await createMcpServer(ctx);
+      const [ near, far ] = InMemoryTransport.createLinkedPair();
+      const client = new Client({ name: 'test', version: '1.0.0' });
+      await Promise.all([ server!.connect(near), client.connect(far) ]);
+
+      const called = await client.callTool({ name: 'blog_missing', arguments: {} });
+      expect(called.isError).to.equal(true);
+      expect(JSON.stringify(called.content)).to.contain('Tool call failed');
+    });
+
+    it('should answer a tool call whose event answers 200 with null as a success', async () => {
+      const ctx = create();
+      contribute(ctx, { name: 'blog_nothing', event: 'blog-nothing' });
+      ctx.on('blog-nothing', ({ res }) => res.results(null));
+
+      const server = await createMcpServer(ctx);
+      const [ near, far ] = InMemoryTransport.createLinkedPair();
+      const client = new Client({ name: 'test', version: '1.0.0' });
+      await Promise.all([ server!.connect(near), client.connect(far) ]);
+
+      const called = await client.callTool({ name: 'blog_nothing', arguments: {} });
+      expect(called.isError).to.not.equal(true);
+      expect(called.content).to.deep.equal([ { type: 'text', text: 'null' } ]);
+    });
+
     it('should let the 403 check see a contributed tool the caller lacks', async () => {
       const ctx = create();
       contribute(ctx, {
@@ -378,6 +408,30 @@ describe('ai/tools', () => {
       expect(result.code).to.equal(200);
       expect(result.results).to.deep.equal({ ok: true });
       expect(result.error).to.equal(undefined);
+    });
+
+    it('should return code zero for an event nobody answered', async () => {
+      const ctx = create();
+      const result = await callTool(ctx, tool(), {}, { kind: 'public', scopes: [] });
+      expect(result.code).to.equal(0);
+      expect(result.error).to.equal(undefined);
+      expect(failed(result)).to.equal(true);
+    });
+
+    it('should keep an answer of 200 with null results a success', async () => {
+      const ctx = create();
+      ctx.on('echo', ({ res }) => res.results(null));
+      const result = await callTool(ctx, tool(), {}, { kind: 'public', scopes: [] });
+      expect(result.code).to.equal(200);
+      expect(result.results).to.equal(null);
+      expect(failed(result)).to.equal(false);
+    });
+
+    it('should call a result a failure by code, by error, or by no answer', () => {
+      expect(failed({ code: 200 })).to.equal(false);
+      expect(failed({ code: 404 })).to.equal(true);
+      expect(failed({ code: 200, error: 'Nope.' })).to.equal(true);
+      expect(failed({ code: 0 })).to.equal(true);
     });
 
     it('should return the code and error of a refused event', async () => {
@@ -703,19 +757,6 @@ describe('ai/tools', () => {
       const back = await other.callTool(ctx, tool(), {}, who, undefined, undone);
       expect(forward.results).to.deep.equal({ here: 'undo_1', there: 'undo_1' });
       expect(back.results).to.deep.equal({ here: 'undo_1', there: 'undo_1' });
-    });
-
-    it('should add the undoing lookup to a store an earlier copy made without it', async () => {
-      const key = Symbol.for('stackpress-ai.tools');
-      const shared = (globalThis as Record<symbol, { undoings?: WeakMap<object, Undoing> }>)[key];
-      const kept = shared.undoings;
-      delete shared.undoings;
-      try {
-        await import('../src/scripts/tools.js?old-store');
-        expect(shared.undoings).to.be.instanceOf(WeakMap);
-      } finally {
-        shared.undoings = kept;
-      }
     });
   });
 

@@ -72,11 +72,9 @@ records the caller, resolves the tool's event, and returns
 `{ code, status, results, error }`. It does not decide whether the caller may
 use the tool; the transport or agent does that first.
 
-- `failed(result)` is code of 400 or more, or an error message. An event that
-  nobody answered comes back with code `0`.
-- MCP turns a failed result into an MCP result with `isError: true`. It treats
-  code `0` with no error as success with a null result. The agent treats code
-  `0` as failed (`execute`, `src/scripts/turn.ts`). The two surfaces disagree.
+- `failed(result)` is code `0`, code of 400 or more, or an error message.
+  Code `0` means nobody answered. MCP returns `isError: true` and the agent
+  logs failure; a response with code `200` and null results remains success.
 - Identity fields `profileId`, `applicationId`, and `sessionId` are stripped from
   input for every caller and then written only from the caller record
   (`withToolData`, `src/helpers.ts`). Fixed config `data` is trusted.

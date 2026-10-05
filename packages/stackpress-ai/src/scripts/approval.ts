@@ -10,9 +10,16 @@ import type {
   UndoResult,
   Undoing
 } from '../types.js';
-import { isRecord } from '../helpers.js';
-import { inverseOf, offeredTools, person, refuse } from './agent.js';
 import type { AgentRuntime, Sink } from './agent.js';
+import { isRecord } from '../helpers.js';
+import {
+  RUNNING,
+  contractOf,
+  inverseOf,
+  offeredTools,
+  person,
+  refuse
+} from './agent.js';
 import { continueTurn, execute, recorder } from './turn.js';
 import { collectTools } from './tools.js';
 
@@ -47,39 +54,73 @@ export async function approve(
   if (!isOwned(owned)) return owned;
   const { who, profileId, thread } = owned;
 
-  const approval = await rt.store.approveAction(owned.action.id, profileId);
-  if (!approval) {
-    return refuse(404, 'not_found', 'Action not found.');
-  }
+  //No message can be stored while an approved action may still act, and a
+  // message stored before is found by the claim. A repeated click that finds
+  // the gate held still gets the stored record, but a first click that does
+  // is turned away with nothing claimed
+  const held = await rt.store.gate(thread.id, profileId);
   const { events, emit } = recorder(sink);
-
-  //only the call that claimed the action may run it
-  if (!approval.claimed || !approval.claim) {
-    return settled(thread.id, approval.action, events, emit);
+  if (!held) {
+    const stored = await rt.store.getAction(owned.action.id, profileId);
+    if (stored && stored.status !== 'pending') {
+      return settled(thread.id, stored, events, emit);
+    }
+    return refuse(409, 'busy', RUNNING);
   }
 
-  //a tool that has since left the registry cannot run, and the action is
-  // settled as failed so it does not stay approved forever
-  const tools = await offeredTools(rt.ctx);
-  const tool = tools.get(approval.action.tool);
-  if (!tool) {
-    const error = 'This action is no longer available.';
-    await rt.store.completeAction(approval.action.id, approval.claim, {
-      status: 'failed', error
-    });
-    emit({
-      type: 'action-failed',
-      actionId: approval.action.id,
-      tool: approval.action.tool,
-      input: asInput(approval.action.input),
-      error
-    });
-  } else {
-    await execute(rt, { who, req, emit }, tool, approval.action, approval.claim);
+  let approval;
+  try {
+    approval = await rt.store.approveAction(owned.action.id, profileId);
+    if (!approval) {
+      return refuse(404, 'not_found', 'Action not found.');
+    }
+
+    //only the call that claimed the action may run it
+    if (!approval.claimed || !approval.claim) {
+      return settled(thread.id, approval.action, events, emit);
+    }
+
+    //a tool that has since left the registry, or whose contract is no longer
+    // the one the person was shown, cannot run, and the action is settled as
+    // failed so it does not stay approved forever. A fresh proposal is the
+    // way to approve what the tool does now
+    const tools = await offeredTools(rt.ctx);
+    const tool = tools.get(approval.action.tool);
+    const reason = !tool
+      ? 'This action is no longer available.'
+      : tool.event !== approval.action.event
+        //a proposal with no digest cannot be tied to what the person saw
+        || approval.action.contract !== contractOf(tool)
+        ? 'This action changed after it was proposed, or cannot be checked '
+          + 'against it, so it was not run. Ask again to get a new approval.'
+        : null;
+    if (!tool || reason) {
+      await rt.store.completeAction(approval.action.id, approval.claim, {
+        status: 'failed', error: reason as string
+      });
+      emit({
+        type: 'action-failed',
+        actionId: approval.action.id,
+        tool: approval.action.tool,
+        input: asInput(approval.action.input),
+        error: reason as string
+      });
+    } else {
+      await execute(
+        rt, { who, req, emit }, tool, approval.action, approval.claim
+      );
+    }
+  } finally {
+    await held.release();
   }
 
   const status = await continueTurn(rt, {
-    who, req, threadId: thread.id, profileId, emit
+    who,
+    req,
+    threadId: thread.id,
+    profileId,
+    epoch: approval.action.epoch,
+    emit
   });
   emit({ type: 'finished', status });
   return {
@@ -126,7 +167,12 @@ export async function decline(
     tool: declined.action.tool
   });
   const status = await continueTurn(rt, {
-    who, req, threadId: thread.id, profileId, emit
+    who,
+    req,
+    threadId: thread.id,
+    profileId,
+    epoch: declined.action.epoch,
+    emit
   });
   emit({ type: 'finished', status });
   return {

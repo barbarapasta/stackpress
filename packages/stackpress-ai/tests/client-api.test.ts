@@ -59,7 +59,7 @@ describe('the route client', () => {
 
   describe('why a request failed', () => {
     it('reads the reason the routes name', () => {
-      for (const reason of [ 'unauthorized', 'invalid', 'not_found', 'conflict', 'limit', 'csrf', 'unavailable' ]) {
+      for (const reason of [ 'unauthorized', 'invalid', 'not_found', 'conflict', 'busy', 'limit', 'csrf', 'unavailable' ]) {
         expect(reasonOf(400, { errors: { reason } })).to.equal(reason);
       }
     });
@@ -73,6 +73,14 @@ describe('the route client', () => {
       expect(reasonOf(404, {})).to.equal('unavailable');
       expect(reasonOf(500, { errors: { reason: 'made-up' } })).to.equal('unavailable');
       expect(reasonOf(200, {})).to.equal('unknown');
+    });
+
+    it('tells a busy chat from a conflict, though both are a 409', () => {
+      expect(reasonOf(409, { errors: { reason: 'busy' } })).to.equal('busy');
+      expect(reasonOf(409, { errors: { reason: 'conflict' } })).to.equal('conflict');
+      expect(reasonOf(409, {})).to.equal('conflict');
+      expect(failure(409, { error: 'raw words', errors: { reason: 'busy' } }))
+        .to.deep.equal({ ok: false, status: 409, reason: 'busy' });
     });
 
     it('keeps the status, the reason and the reset time, and none of the words', () => {

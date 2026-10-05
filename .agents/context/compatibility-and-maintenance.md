@@ -129,7 +129,6 @@ Source-confirmed in this checkout; do not copy, and route repairs separately:
 - The scaffold's `plugins/store/populate.ts` sends no phone, while `auth-signup`
   runs `normalizePhone(input.phone)` unguarded, and its default `admin` password
   is shorter than the scaffold's own minimum of 8.
-- MCP counts an event nobody answered (code `0`) as success, the agent as failed.
 - A live MCP session's call handlers keep the scopes captured when it opened.
 
 ## Missing Current Guarantees

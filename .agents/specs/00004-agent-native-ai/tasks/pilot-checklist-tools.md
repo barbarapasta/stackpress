@@ -169,4 +169,3 @@ run and nothing logged. From: DEC-009, J-005, first-pass inventory.
   instruction was that the agent must do every action available there; where
   an action is excluded (SMTP secrets, for example), the owners' decision says
   so. From: DEC-009, DEC-012.
-

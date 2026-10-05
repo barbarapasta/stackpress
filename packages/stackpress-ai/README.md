@@ -19,7 +19,7 @@ Import the server-side API from the package root, and the other parts from their
 | `stackpress-ai/client` | browser safe | `AgentPanel` (also the default export), the pieces it is built from, and their types. It reaches only `react` and `r22n`. |
 | `stackpress-ai/styles.css` | browser | The panel's stylesheet. Add it to `cssFiles`. |
 | `stackpress-ai/adapters` | server only | `createAdapter` (also the default export), the provider chooser a runtime option `connect` can call, and `ProviderError` with `toProviderError`, the error the adapters throw. |
-| `stackpress-ai/types` | types only | Every type of the package, including those not re-exported from the root. |
+| `stackpress-ai/types` | types only | Server-side public types, including the runtime and store types. Panel types come from `stackpress-ai/client`. |
 | `stackpress-ai/scripts` | server only | The lower level workflow functions (`runTurn`, `approve`, `decline`, `undo`, `listThreads`, `loadThread`), the tool registry (`collectTools`, `callTool`, `loadRegistry`) and the MCP transport entries `http`, `sse` and `stdio`. |
 | `stackpress-ai/scripts/http`, `/sse`, `/stdio` | server only | The MCP transports, including `McpHttpServer` and `McpSseServer`. |
 | `stackpress-ai/events` and `/events/http`, `/sse`, `/stdio` | server only | The event listeners the plugin registers, for an app that wires them itself. |
@@ -52,7 +52,7 @@ This walkthrough adds the agent to an existing Stackpress app that already loads
    ]
    ```
 
-3. **Add the records.** The agent keeps its threads, messages, actions and usage in four tables. Add the package's schema next to the app's other `use` lines (blog: `templates/blog/schema.idea`), then generate and push.
+3. **Add the records.** The agent keeps its threads, messages, actions, usage and internal locks in five tables. Add the package's schema next to the app's other `use` lines (blog: `templates/blog/schema.idea`), then generate and push.
 
    ```idea
    use "stackpress/stackpress.idea"
@@ -194,8 +194,8 @@ The agent acts for a person, so what it does is logged and, when it cannot be ta
  - A `GET` tool runs at once and is logged with no Undo.
 
 ```ts
-{ name: 'article_publish', event: 'article-update', method: 'PUT',
-  data: { status: 'PUBLISHED' }, agent: true, inverse: 'article_unpublish' }
+{ name: 'article_publish', event: 'app-article-publish', method: 'PUT',
+  agent: true, inverse: 'article_unpublish' }
 ```
 
 An inverse that needs more than the stored input, such as the id of what the original created, a fresh operation identifier, or the record's current state, reads the **undoing record** from the request its event receives. Like the caller record it is kept apart from the input, built only by an undo, and unreachable from tool input, the page context or the message. `undoing(req)` returns it during an undo and `undefined` on any other call, so the same event can tell the two apart.
@@ -213,7 +213,7 @@ server.on('receipt-void', ({ req, res }) => {
 
 The record holds `original`, the action being undone (`id`, `tool`, `input`, `result` as the log returns it, and its `operation` identifier or `null`), and `undoActionId`, the id of the action the undo is logged as. That action exists before the inverse runs, so derive the inverse's own operation identifier from it. An undo is claimed once, so a double click runs the inverse once, with one record. If the app refuses and the person tries again, the retry is a new undo action with a new id. The inverse's own `operation` is captured on the undo action the same way as for any action. The input is still the original's stored input. The package supplies nothing else: reading the record's current revision, building the app's own request and deciding whether the undo is still allowed stay in the inverse's event.
 
-The pause is stored in the database, not held in memory, so any server can resume it. An approval is valid until the person sends a new message in the thread or `approvalTtl` passes. When the model asks for several tools in one step they run in order until the first one that needs approval; that one waits and the rest are answered as not run, since they may depend on it.
+The pause is stored in the database, not held in memory, so any server can resume it. A proposal records a digest of its event, method, fixed data, input schema and undo contract. If these change before approval, or an older proposal has no digest, it fails without running; ask again for a fresh proposal. Completed actions also retain their action ids in tool results, so the next model request sees a later undo and its result. An approval is valid until the person sends a new message in the thread or `approvalTtl` passes. When the model asks for several tools in one step they run in order until the first one that needs approval; that one waits and the rest are answered as not run, since they may depend on it.
 
 Approving, declining and undoing each run once, even on a double click or from two servers at the same moment. A repeat finds the action already settled and does nothing.
 
@@ -227,7 +227,7 @@ Approving, declining and undoing each run once, even on a double click or from t
 | `undone` | The inverse ran. |
 | `expired` | A new message arrived or the time passed before the person answered. |
 
-Two stops leave a mark you should know about. If a server stops while it runs an approved action, the action stays `approved` and is not rerun, because it may already have run. If a server stops right after an undo was claimed, the original can show as `undone` without the inverse having run. The undo of `article_publish` in the blog sets the article to `DRAFT`, not to what it was before, because the `article-update` event returns the updated article and not the earlier status, so there is nothing for the record to carry. The blog's `sample_receipt_issue` and `sample_receipt_void` show the record in use.
+Two stops leave a mark you should know about. If a server stops while it runs an approved action, the action stays `approved` and is not rerun, because it may already have run. If a server stops right after an undo was claimed, the original can show as `undone` without the inverse having run. The blog's app-owned publish event checks the article admin route permission and reports the earlier status; its inverse checks permission again and restores that status. Its comment-removal event uses the same admin route rule and deactivates the comment. The receipt demo shows an inverse using an original result and stores no business data.
 
 ## Providers, keys and models
 
@@ -243,13 +243,13 @@ A turn is refused with `503` and the fixed text "The agent is unavailable right 
 
 ## The daily limit
 
-`agent.limit` is the number of tokens (input plus output) one person may use per UTC day. Without it there is no limit. The count is kept in the person's `AgentUsage` row for the day and is checked before every provider call. At the limit a message is refused with `429` and the body keeps `errors.resetsAt`, the time the day rolls over. A tool the person already approved still runs at the limit; the model is not called after it. `GET /agent/start` reports what is left.
+`agent.limit` is the number of tokens (input plus output) one person may use per UTC day. Without it there is no limit. The count is kept in the person's `AgentUsage` row for the day. A durable per-person lock admits one provider call at a time while a limit is configured and checks the allowance again when claimed. Tokens are counted before releasing it, against the UTC day the call began. One reply can exceed the remaining allowance; the next call is then refused. This counts reported tokens, not an exact provider bill. At the limit a message is refused with `429` and the body keeps `errors.resetsAt`, the time the day rolls over. A tool the person already approved still runs at the limit; the model is not called after it. `GET /agent/start` reports what is left.
 
 `agent.steps` (default 8) is how many model calls one turn may make, so a model that keeps retrying stops.
 
 ## Stored records
 
-`schema.idea` in this package defines four models. They are not part of the aggregate `stackpress` schema.
+`schema.idea` in this package defines five models. They are not part of the aggregate `stackpress` schema.
 
 | Model | Holds |
 | --- | --- |
@@ -257,17 +257,18 @@ A turn is refused with `503` and the fixed text "The agent is unavailable right 
 | `AgentTurn` | One message. Append-only: the store has no way to edit or delete one. The provider's reply is kept exactly as given so it can be replayed to the model that wrote it. |
 | `AgentAction` | The log of what the agent did for a person: the tool, the event, the input, the status, the result, your `operation` identifier, which action an undo reverses, and when. |
 | `AgentUsage` | Tokens used per person per day. |
+| `AgentLock` | Internal per-person provider admission and per-thread coordination, with holder, current message token and claim time. Generated writes are guarded like the log. |
 
-`createStore(ctx, { approvalTtl, now })` reads and writes them through the generated model events. Approving is one guarded `UPDATE` that moves a row from `pending` to `approved` and writes a token; exactly one call finds its own token on the row and runs the tool, and every other call gets the stored record. Declining, undoing, expiry and each usage addition are guarded statements in the same way. The store keeps no module-level state.
+`createStore(ctx, { approvalTtl, now })` reads and writes them through the generated model events. Approving is one guarded `UPDATE` that moves a row from `pending` to `approved` and writes a token; exactly one call finds its own token on the row and runs the tool, and every other call gets the stored record. Declining, undoing, expiry and each usage addition are guarded statements in the same way. The store keeps no module-level state. It reads complete turn and action histories by pagination; the first 1,000 records are not a history limit. Thread locks serialize message storage, proposals and approved or automatic write execution. A newer accepted message replaces the current token, so old replies cannot create actionable proposals or execute writes. A message arriving while an approved or automatic write runs is refused with `409` (`busy`), rather than acknowledged as cancelling that write.
 
 **Only the store changes these records.** An app that uses this schema also gets generated model events and admin pages for the tables. While the plugin is active it registers guards on those events, ahead of the generated listeners and whichever plugin registers first. A guarded event answers `403` with "Agent records can only be changed through the agent store." and never reaches the generated code, so an admin page, or any plugin that emits the event, cannot change a turn or rewrite the action log.
 
 | Model | Refused | Left open |
 | --- | --- | --- |
-| `AgentTurn`, `AgentAction`, `AgentUsage` | `update`, `remove`, `restore`, `purge`, `upsert`, `batch`, and `create` from anywhere but the store | `detail`, `search`, `get` |
+| `AgentTurn`, `AgentAction`, `AgentUsage`, `AgentLock` | `update`, `remove`, `restore`, `purge`, `upsert`, `batch`, and `create` from anywhere but the store | `detail`, `search`, `get` |
 | `AgentThread` | `purge` only, which would empty the whole table | everything else |
 
-A thread is left editable because its title and active flag belong to the person, not to the audit log, and the store itself updates it. The admin lists and detail pages still load. Only `createStore` can create a turn, an action or a usage row: it marks its own create call in the async context of that call, which a request, its data or its headers cannot carry, so a made-up row sent through the generated `create` event or the admin create page is refused. The mark is shared across the CJS and ESM copies of the package.
+A thread is left editable because its title and active flag belong to the person, not to the audit log, and the store itself updates it. The admin lists and detail pages still load. Only `createStore` can create a turn, an action, a usage row or a lock: it marks its own create call in the async context of that call, which a request, its data or its headers cannot carry, so a made-up row sent through the generated `create` event or the admin create page is refused. The mark is shared across the CJS and ESM copies of the package.
 
 Two things to know:
 
@@ -388,6 +389,9 @@ A request either presents no key or presents a key. No key is a public caller. A
 A verified or public caller who sees no tool still connects. A valid key whose scopes match no tool, or a caller with no key when every tool needs a scope, gets a normal connection and an empty `tools/list`, over Streamable HTTP in both modes and over SSE. A refused key is still `401`, and a call to a tool the caller lacks is still `403`. stdio still fails with "Resolved MCP tool registry is empty." when no tool is registered at all, because there that means the server is misconfigured.
 
 ## Known limits
+
+- Locks are not automatically stolen or expired: a slow call must not overlap a replacement. A stopped process can leave a profile or thread lock held. Before clearing that specific holder directly in the database, stop or confirm the original worker is gone, check the action and provider outcome, and reconcile any unrecorded usage. Accounting failure keeps the profile lock held. Clearing a live holder can allow duplicate work or spend. Regenerate and push the shipped schema when upgrading an existing app.
+- Public type tests in `tests/surface.test.ts` check built declarations as well as source. Build the package before `yarn ai test`; the root build also provides them. For a fresh blog client, run `yarn blog test:clean` (generate, then test).
 
  - Only OpenRouter has run against a live provider. See Providers.
  - The stricter key rules are a breaking change with no compatibility switch. See What changed.

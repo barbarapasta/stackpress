@@ -44,8 +44,6 @@ const store: {
   open: new WeakMap(),
   queue: new WeakMap()
 }) as never;
-//a store made by an earlier copy of this package has no lookup for undoings
-store.undoings ??= new WeakMap();
 const { callers, undoings, open, queue } = store;
 
 //--------------------------------------------------------------------//
@@ -174,10 +172,12 @@ export async function callTool(
 }
 
 /**
- * Whether a tool result is a failure.
+ * Whether a tool result is a failure. A code of zero means no listener
+ * answered the event, so nothing was done and it is a failure like any
+ * other. An answer of 200 with null results is a success.
  */
 export function failed(result: ToolResult) {
-  return result.code >= 400 || !!result.error;
+  return !result.code || result.code >= 400 || !!result.error;
 }
 
 //--------------------------------------------------------------------//

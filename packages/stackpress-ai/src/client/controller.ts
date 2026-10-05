@@ -3,17 +3,6 @@
 // draw this state and call these methods. The panel decides nothing about
 // permission: approve, decline and undo are requests, and what the server
 // answers is what the page shows.
-import { createClient } from './api.js';
-import {
-  addUser,
-  applyEvent,
-  dropLast,
-  emptyConversation,
-  fromThread,
-  patchAction,
-  settle,
-  syncActions
-} from './state.js';
 import type {
   ActionItem,
   Chip,
@@ -27,6 +16,17 @@ import type {
   StartInfo,
   Uploaded
 } from './types.js';
+import { createClient } from './api.js';
+import {
+  addUser,
+  applyEvent,
+  dropLast,
+  emptyConversation,
+  fromThread,
+  patchAction,
+  settle,
+  syncActions
+} from './state.js';
 
 //--------------------------------------------------------------------//
 // Constants
@@ -212,6 +212,9 @@ export function createPanel(options: PanelOptions = {}) {
         return;
       case 'conflict':
         set({ notice: { code: 'conflict' } });
+        return;
+      case 'busy':
+        set({ notice: { code: 'busy' } });
         return;
       case 'forbidden':
         set({ notice: { code: 'forbidden' } });

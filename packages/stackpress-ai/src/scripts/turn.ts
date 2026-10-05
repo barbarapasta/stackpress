@@ -13,15 +13,21 @@ import type {
   TurnStatus,
   Undoing
 } from '../types.js';
+import type { AgentRuntime, Sink, StoredResult } from './agent.js';
 import { isRecord, validateInput } from '../helpers.js';
 import { ProviderError } from '../adapters/index.js';
 import {
+  BUSY,
   NOT_RUN,
+  RUNNING,
+  SUPERSEDED,
   UNAVAILABLE,
   WAITING,
   buildSystem,
   buildTranscript,
+  contractOf,
   lastModel,
+  limitOf,
   limited,
   needsApproval,
   offered,
@@ -33,9 +39,10 @@ import {
   pick,
   refuse,
   render,
+  resetsAt,
   DEFAULT_STEPS
 } from './agent.js';
-import type { AgentRuntime, Sink, StoredResult } from './agent.js';
+import { ThreadBusy } from './store.js';
 import { callTool, failed } from './tools.js';
 
 //--------------------------------------------------------------------//
@@ -48,6 +55,9 @@ export type Run = {
   req: ToolRequest,
   threadId: string,
   profileId: string,
+  //the id of the person's message this run answers. Only the run of the
+  // newest message of a thread may call a provider or act for the person
+  epoch: string,
   adapter: Adapter,
   emit: Sink,
   //plain hints from the page, only ever shown to the model
@@ -58,7 +68,9 @@ export type Run = {
 type Attempt = {
   result: StoredResult,
   //true when the call stopped at an approval
-  waiting: boolean
+  waiting: boolean,
+  //true when a newer message replaced this run, which then goes no further
+  superseded?: boolean
 };
 
 //how one execution of a stored action ended
@@ -147,6 +159,12 @@ export async function runTurn(
     );
   }
 
+  //with a daily limit a person has one provider call at a time, so a message
+  // that would have to wait behind one is turned away before it is stored
+  if (limitOf(rt) && await rt.store.busy(profileId)) {
+    return refuse(409, 'busy', BUSY);
+  }
+
   const { events, emit } = recorder(sink);
   const target = thread || await rt.store.createThread({
     profileId,
@@ -155,18 +173,29 @@ export async function runTurn(
   });
   emit({ type: 'thread', threadId: target.id, title: target.title });
 
-  //storing a message from the person expires any approval still waiting
-  await rt.store.appendTurn(target.id, profileId, {
-    role: 'user',
-    text: parsed.message,
-    files: parsed.files
-  });
+  //storing a message from the person ends the approvals still waiting and
+  // replaces any run still going. It waits for no action: while an approved
+  // action is running it is refused, and nothing is stored
+  let message;
+  try {
+    message = await rt.store.appendMessage(target.id, profileId, {
+      role: 'user',
+      text: parsed.message,
+      files: parsed.files
+    });
+  } catch (error) {
+    if (error instanceof ThreadBusy) {
+      return refuse(409, 'busy', RUNNING);
+    }
+    throw error;
+  }
 
   const status = await converse(rt, {
     who,
     req,
     threadId: target.id,
     profileId,
+    epoch: message.epoch,
     adapter,
     emit,
     hints: parsed.context
@@ -183,7 +212,7 @@ export async function runTurn(
  */
 export async function continueTurn(
   rt: AgentRuntime,
-  run: Omit<Run, 'adapter'>
+  run: Omit<Run, 'adapter' | 'epoch'> & { epoch?: string | null }
 ): Promise<TurnStatus> {
   const turns = await rt.store.listTurns(run.threadId, run.profileId);
   const thread = await rt.store.getThread(run.threadId, run.profileId);
@@ -193,7 +222,9 @@ export async function continueTurn(
     run.emit({ type: 'error', status: 'unavailable', message: UNAVAILABLE });
     return 'unavailable';
   }
-  return converse(rt, { ...run, adapter });
+  //an action from before tokens were kept belongs to the newest message
+  const epoch = run.epoch ?? await rt.store.epoch(run.threadId);
+  return converse(rt, { ...run, epoch, adapter });
 }
 
 /**
@@ -217,10 +248,24 @@ export async function converse(
     : DEFAULT_STEPS;
 
   for (let step = 0; step < steps; step++) {
+    //a message that came after this run began replaced it, and the person
+    // is answered by the run of that message
+    if (!await store.current(run.threadId, run.epoch)) return 'settled';
+
     //every provider call is checked, including the ones a turn makes after
-    // an approval and the later steps of one long turn
-    const reset = await limited(rt, run.profileId);
-    if (reset) {
+    // an approval and the later steps of one long turn. Under a limit the
+    // check and the right to call are one step, so calls that start together
+    // cannot all pass it
+    const limit = limitOf(rt);
+    const admission = limit
+      ? await store.admit(run.profileId, limit)
+      : null;
+    if (admission && !admission.ok) {
+      if (admission.reason === 'busy') {
+        run.emit({ type: 'error', status: 'busy', message: BUSY });
+        return 'busy';
+      }
+      const reset = resetsAt(rt.now());
       run.emit({
         type: 'error',
         status: 'limit',
@@ -239,24 +284,54 @@ export async function converse(
         onText: text => run.emit({ type: 'text', text })
       });
     } catch (error) {
+      //nothing was spent, so the right to call is given back as it was
+      if (admission?.ok) await admission.settle();
       return fail(rt, run, error);
     }
 
-    const assistant = await store.appendTurn(run.threadId, run.profileId, {
-      role: 'assistant',
-      text: reply.text,
-      toolCalls: reply.toolCalls.length ? reply.toolCalls : undefined,
-      provider: run.adapter.provider,
-      model: run.adapter.model,
-      raw: reply.raw ?? undefined,
-      inputTokens: reply.usage.input,
-      outputTokens: reply.usage.output
-    });
-    await store.addUsage(run.profileId, {
+    //what the call used is counted whether or not the run is still wanted,
+    // and before the next call can be admitted
+    const used = {
       inputTokens: reply.usage.input,
       outputTokens: reply.usage.output,
       turns: 1
-    });
+    };
+    try {
+      if (admission?.ok) {
+        await admission.settle(used);
+      } else {
+        await store.addUsage(run.profileId, used);
+      }
+    } catch (error) {
+      //the reply is dropped, since its cost could not be recorded. With a
+      // limit the slot stays held, so no call is admitted against the
+      // allowance as it was before this one
+      rt.log('The usage of a provider call could not be recorded.', error);
+      run.emit({
+        type: 'error',
+        status: 'failed',
+        message: 'The model could not answer. Try again.'
+      });
+      return 'failed';
+    }
+
+    //a reply that arrives after a newer message is dropped
+    const assistant = await store.appendReply(
+      run.threadId,
+      run.profileId,
+      run.epoch,
+      {
+        role: 'assistant',
+        text: reply.text,
+        toolCalls: reply.toolCalls.length ? reply.toolCalls : undefined,
+        provider: run.adapter.provider,
+        model: run.adapter.model,
+        raw: reply.raw ?? undefined,
+        inputTokens: reply.usage.input,
+        outputTokens: reply.usage.output
+      }
+    );
+    if (!assistant) return 'settled';
     run.emit({
       type: 'usage', input: reply.usage.input, output: reply.usage.output
     });
@@ -300,13 +375,20 @@ export async function converse(
       const attempt = await attempted(
         rt, run, assistant.id, tools, call, waiting
       );
+      //a newer message ended this run. Whatever it has not done stays
+      // undone, and the model is told on the next call that it was lost
+      if (attempt.superseded) return 'settled';
       results.push(attempt.result);
       waiting = waiting || attempt.waiting;
     }
-    await store.appendTurn(run.threadId, run.profileId, {
-      role: 'tool',
-      toolResults: results
-    });
+    if (!await store.appendReply(
+      run.threadId, run.profileId, run.epoch, {
+        role: 'tool',
+        toolResults: results
+      }
+    )) {
+      return 'settled';
+    }
 
     //nothing is held in memory: the pending action and these turns are the
     // whole state, and an approval rebuilds the rest from the store
@@ -350,7 +432,7 @@ export async function execute(
   }
 
   //an event nobody answered has a code of zero, and nothing was done
-  if (failed(result) || !result.code) {
+  if (failed(result)) {
     const error = describeFailure(result);
     await rt.store.completeAction(action.id, claim, {
       status: 'failed',
@@ -441,16 +523,27 @@ async function attempted(
     };
   }
 
+  const proposal = {
+    threadId: run.threadId,
+    turnId,
+    profileId: run.profileId,
+    tool: tool.name,
+    event: tool.event,
+    input,
+    epoch: run.epoch,
+    contract: contractOf(tool)
+  };
+
   if (needsApproval(tool)) {
-    const action = await rt.store.createAction({
-      threadId: run.threadId,
-      turnId,
-      profileId: run.profileId,
-      tool: tool.name,
-      event: tool.event,
-      input,
+    //a run that a newer message replaced makes no card, so the person is
+    // never shown an approval that cannot be given
+    const action = await rt.store.propose({
+      ...proposal,
       irreversible: true
     });
+    if (!action) {
+      return { result: answer(SUPERSEDED, true), waiting: false, superseded: true };
+    }
     run.emit({
       type: 'action-waiting',
       actionId: action.id,
@@ -461,27 +554,44 @@ async function attempted(
     return { result: answer(WAITING, false, action.id), waiting: true };
   }
 
-  //a reversible tool, or a read, runs now and is logged. It goes through the
-  // same claim as an approval so it can only ever run once
-  const action = await rt.store.createAction({
-    threadId: run.threadId,
-    turnId,
-    profileId: run.profileId,
-    tool: tool.name,
-    event: tool.event,
-    input,
-    irreversible: false,
-    expires: null
-  });
-  const approval = await rt.store.approveAction(action.id, run.profileId);
-  if (!approval?.claimed || !approval.claim) {
+  //A reversible tool, or a read, runs now and is logged. It goes through
+  // the same claim as an approval so it can only ever run once, and a write
+  // holds the gate of the thread from before the claim until it is settled,
+  // so no message is stored while it may still act and any message stored
+  // before it is found by the claim
+  const held = tool.method === 'GET'
+    ? null
+    : await rt.store.gate(run.threadId, run.profileId);
+  if (tool.method !== 'GET' && !held) {
+    return { result: answer(SUPERSEDED, true), waiting: false, superseded: true };
+  }
+  try {
+    const action = await rt.store.createAction({
+      ...proposal,
+      irreversible: false,
+      expires: null
+    });
+    const approval = await rt.store.approveAction(action.id, run.profileId);
+    if (!approval?.claimed || !approval.claim) {
+      return approval && approval.action.status === 'expired'
+        ? {
+          result: answer(SUPERSEDED, true),
+          waiting: false,
+          superseded: true
+        }
+        : {
+          result: answer('The action could not be started.', true),
+          waiting: false
+        };
+    }
+    const outcome = await execute(rt, run, tool, action, approval.claim);
     return {
-      result: answer('The action could not be started.', true),
+      result: answer(outcome.output, outcome.failed, action.id),
       waiting: false
     };
+  } finally {
+    await held?.release();
   }
-  const outcome = await execute(rt, run, tool, action, approval.claim);
-  return { result: answer(outcome.output, outcome.failed), waiting: false };
 }
 
 /**

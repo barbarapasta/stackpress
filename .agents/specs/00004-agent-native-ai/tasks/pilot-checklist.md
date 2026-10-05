@@ -68,10 +68,10 @@ assume an item will pass; record failures as findings, with the output.
   `yarn build` in `packages/stackpress-ai` (the `cjs` and `esm` folders are
   git-ignored and must be current), then
   `npm pack --ignore-scripts --pack-destination <a folder outside both repos>`.
-  The tree as of 2026-10-05 packs to `stackpress-ai-0.10.8.tgz`, 112,614 bytes,
+  The corrected tree verified in task 00010B on 2026-10-05 packs to `stackpress-ai-0.10.8.tgz`, 119,016 bytes,
   263 files, sha256
-  `608b872a9efa31771c67374b96b7a21bea4f7b0d54ba53c79009b4f47bdf5128`, sha1
-  `ba7bf01980bfc09ce795347296d1cdb2e1daede8` (packing twice gave identical
+  `0e0cbabdc9886437f198d6f86caf611e5b6f35a9a246c38b905f4c9d6660d09c`, sha1
+  `3086885360da481e84245ad5821516cc34879e75` (packing twice gave identical
   bytes). If the source changed since, the numbers will differ; record yours.
   The trap: the registry already has a different `stackpress-ai@0.10.8`. In a
   throwaway yarn v1 project, replacing a tarball with different bytes under the
@@ -102,4 +102,3 @@ assume an item will pass; record failures as findings, with the output.
   already fails, so later failures are attributable. Unknown: whether either
   suite is green on Node 24 today; neither has been run there for this work.
   From: GAP-011, task 9 notes.
-

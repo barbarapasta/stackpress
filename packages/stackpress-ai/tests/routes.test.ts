@@ -610,6 +610,21 @@ for (const kind of KINDS) {
         expect(reply.text).to.not.include('secret internal detail');
       });
 
+      it('keeps a busy chat apart from a conflict, with its status', async () => {
+        for (const reason of [ 'busy', 'conflict' ]) {
+          const { me } = await open(kind, {
+            extra: app => {
+              app.on('ai-threads', ({ res }) => {
+                res.setError('Another request is running.', { reason }, [], 409);
+              }, 100);
+            }
+          });
+          const reply = await me.get('/agent/threads');
+          expect(reply.status, reason).to.equal(409);
+          expect(reply.json.errors.reason, reason).to.equal(reason);
+        }
+      });
+
       it('reports a failure that names no reason as unavailable, without its text', async () => {
         const { me } = await open(kind, {
           extra: app => {

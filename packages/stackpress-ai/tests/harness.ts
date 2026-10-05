@@ -62,13 +62,19 @@ export const DDL = [
     event VARCHAR(255) NOT NULL, input JSONB,
     status VARCHAR(255) NOT NULL DEFAULT 'pending', result JSONB,
     error TEXT, operation VARCHAR(255), reverses VARCHAR(255),
-    irreversible BOOLEAN NOT NULL, claim VARCHAR(255), expires TIMESTAMP,
+    irreversible BOOLEAN NOT NULL, claim VARCHAR(255),
+    epoch VARCHAR(255), contract VARCHAR(255), expires TIMESTAMP,
     created TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP)`,
   `CREATE TABLE agent_usage (id VARCHAR(255) PRIMARY KEY,
     profile_id VARCHAR(255) NOT NULL, day VARCHAR(255) NOT NULL,
     input_tokens INTEGER NOT NULL, output_tokens INTEGER NOT NULL,
     turns INTEGER NOT NULL,
+    created TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP)`,
+  `CREATE TABLE agent_lock (id VARCHAR(255) PRIMARY KEY,
+    profile_id VARCHAR(255) NOT NULL, holder VARCHAR(255),
+    epoch VARCHAR(255), since TIMESTAMP,
     created TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP)`
 ];
@@ -77,11 +83,12 @@ export const TABLES: Record<string, string> = {
   'agent-thread': 'agent_thread',
   'agent-turn': 'agent_turn',
   'agent-action': 'agent_action',
-  'agent-usage': 'agent_usage'
+  'agent-usage': 'agent_usage',
+  'agent-lock': 'agent_lock'
 };
 
 const JSON_COLUMNS = [ 'toolCalls', 'toolResults', 'files', 'input', 'result' ];
-const DATE_COLUMNS = [ 'created', 'updated', 'expires' ];
+const DATE_COLUMNS = [ 'created', 'updated', 'expires', 'since' ];
 
 const snake = (name: string) => name.replace(/[A-Z]/g, c => `_${c.toLowerCase()}`);
 const camel = (name: string) => name.replace(/_([a-z])/g, (_, c) => c.toUpperCase());
@@ -370,7 +377,7 @@ export function createWorld(
     //model events go to the database, anything else to the real server
     const real = app.resolve.bind(app);
     app.resolve = (async (event: string, payload?: unknown) => (
-      /^agent-(thread|turn|action|usage)-/.test(event)
+      /^agent-(thread|turn|action|usage|lock)-/.test(event)
         ? answer(event, payload as Record<string, unknown>)
         : real(event, payload as never)
     )) as never;

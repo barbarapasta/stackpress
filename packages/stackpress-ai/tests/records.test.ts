@@ -34,7 +34,7 @@ async function createApp(guardFirst = false) {
   const answer = answerModelEvent(engine, {});
 
   const generated = () => {
-    for (const model of [ 'thread', 'turn', 'action', 'usage' ]) {
+    for (const model of [ 'thread', 'turn', 'action', 'usage', 'lock' ]) {
       for (const verb of [ ...VERBS, ...RECORD_REFUSED, 'get' ]) {
         const event = `agent-${model}-${verb}`;
         app.on(event, async ({ req, res }) => {
@@ -91,7 +91,7 @@ const count = async (world: App, table: string) => (
 
 describe('agent record guards', () => {
   describe('which events are guarded', () => {
-    it('refuses the six write events of turns, actions and usage', () => {
+    it('refuses the six write events of turns, actions, usage and locks', () => {
       const events = refusedEvents();
       for (const model of RECORD_MODELS) {
         for (const verb of [
@@ -104,7 +104,8 @@ describe('agent record guards', () => {
 
     it('leaves reads open and refuses outside creates of the records only', () => {
       expect(createEvents()).to.deep.equal([
-        'agent-turn-create', 'agent-action-create', 'agent-usage-create'
+        'agent-turn-create', 'agent-action-create', 'agent-usage-create',
+        'agent-lock-create'
       ]);
       const events = refusedEvents();
       for (const model of RECORD_MODELS) {
@@ -129,7 +130,8 @@ describe('agent record guards', () => {
         world.reached.length = 0;
 
         for (const [ model, id ] of [
-          [ 'turn', turn.id ], [ 'action', action.id ], [ 'usage', 'p1:2026-10-05' ]
+          [ 'turn', turn.id ], [ 'action', action.id ], [ 'usage', 'p1:2026-10-05' ],
+          [ 'lock', 'profile:p1' ]
         ]) {
           for (const verb of RECORD_REFUSED) {
             const event = `agent-${model}-${verb}`;
@@ -175,7 +177,8 @@ describe('agent record guards', () => {
           //nothing in the data can claim to be the store
           store: true, asStore: true, ai: { store: true }
         };
-        for (const model of [ 'turn', 'action', 'usage' ]) {
+        const locks = await count(world, 'agent_lock');
+        for (const model of [ 'turn', 'action', 'usage', 'lock' ]) {
           const res = await world.app.resolve(`agent-${model}-create`, forged);
           expect(res?.code, model).to.equal(403);
           expect(res?.error).to.equal(GUARD_MESSAGE);
@@ -184,6 +187,7 @@ describe('agent record guards', () => {
         expect(await count(world, 'agent_turn')).to.equal(1);
         expect(await count(world, 'agent_action')).to.equal(1);
         expect(await count(world, 'agent_usage')).to.equal(0);
+        expect(await count(world, 'agent_lock')).to.equal(locks);
       });
 
       it('lets reads through, and edits and creates of a thread', async () => {
@@ -236,7 +240,7 @@ describe('agent record guards', () => {
         result: { ok: true }
       } as never);
       expect(done).to.not.equal(null);
-      expect(await store.markUndone(action.id, 'p1')).to.not.equal(null);
+      expect(await store.claimUndo(action.id, 'p1')).to.not.equal(null);
 
       await store.addUsage('p1', { inputTokens: 3, outputTokens: 4 });
       await store.addUsage('p1', { inputTokens: 1, outputTokens: 1 });
@@ -251,7 +255,7 @@ describe('agent record guards', () => {
       });
       await store.appendTurn(thread.id, 'p1', { role: 'user', text: 'again' });
       expect(await store.getAction(second.id, 'p1')).to.have.property('status', 'expired');
-      await store.declineAction(
+      await store.claimDecline(
         (await store.createAction({
           threadId: thread.id, turnId: turn.id, profileId: 'p1', tool: 'note_add',
           event: 'note-add', input: {}, irreversible: true

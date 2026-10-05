@@ -417,7 +417,7 @@ Use `agent` when your app should have the built-in chat agent. The `stackpress-a
 | `model` | `string` | Required. The default model identifier. It has to be in `models`. |
 | `models` | `{ provider: string; model: string; title?: string }[]` | Required. The models the picker offers. |
 | `instructions` | `string` | Extra text added to the agent's instructions. |
-| `limit` | `number` | Tokens (input plus output) one person may use per UTC day. No limit when unset. |
+| `limit` | `number` | Reported input plus output tokens per person per UTC day. With a limit, durable admission permits one provider call per person at a time. A single reply may exceed the remaining allowance; subsequent calls are refused. No limit when unset. |
 | `approvalTtl` | `number` | Milliseconds a pending approval stays valid. When unset it ends only when the person sends a new message. |
 | `steps` | `number` | Model calls one turn may make. Defaults to `8`. |
 | `base` | `string` | Mount path of the chat routes. Defaults to `/agent`. |
@@ -444,7 +444,7 @@ agent: {
 ### What It Affects
 
 - the `ai-*` events and the chat routes under `base`
-- the four agent tables added by `stackpress-ai/schema.idea`
+- the five agent tables added by `stackpress-ai/schema.idea`
 - which models a person can pick and how many tokens they may use per day
 
 ## `email`

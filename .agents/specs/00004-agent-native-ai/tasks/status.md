@@ -1,7 +1,8 @@
 # Task Status
 
 Plan accepted by the user on 2026-10-04. All ten tasks and all five side quests
-were accepted by the user on 2026-10-05. Implementation is complete.
+were accepted by the user on 2026-10-05. The original implementation is complete. Review corrections are verified;
+the corrected result awaits user acceptance.
 
 | Task | Status | Next action |
 | --- | --- | --- |
@@ -20,3 +21,4 @@ were accepted by the user on 2026-10-05. Implementation is complete.
 | [00009 Public Surface, Packaging, And Coverage](00009-public-surface-packaging-coverage.md) | accepted | Accepted by the user on 2026-10-05. |
 | [00010 Pilot Handoff](00010-pilot-handoff.md) | accepted | Accepted by the user on 2026-10-05. |
 | [00010A Let An Inverse See What It Is Undoing](00010A-undo-with-original-result.md) | accepted | Accepted by the user on 2026-10-05. |
+| [00010B Review Corrections And Source Standards](00010B-review-corrections.md) | verified | Combined checks pass; review the correction outcome in the feature review. |

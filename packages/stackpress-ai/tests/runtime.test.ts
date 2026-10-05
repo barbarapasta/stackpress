@@ -476,7 +476,9 @@ describe('agent runtime', function () {
       expect(output('pending').output).to.contain('Waiting for the person');
       expect(output('approved').output).to.contain('running');
       expect(output('done', { result: { ok: 1 } })).to.deep.equal({ id: 'c', name: 'tool', output: '{"ok":1}' });
-      expect(output('undone', { result: 'text' }).output).to.equal('text');
+      //what happened then is kept, and the model is told what happened since
+      expect(output('undone', { result: 'text' }).output)
+        .to.match(/^text\n\nNOTE: .*undo is in progress/);
       expect(output('failed', { error: 'It broke.' })).to.include({ output: 'It broke.', isError: true });
       expect(output('failed').output).to.equal('The action failed.');
       expect(output('declined').output).to.not.contain('They said');

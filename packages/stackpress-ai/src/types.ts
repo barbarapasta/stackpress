@@ -263,6 +263,10 @@ export type AgentAction = {
   reverses?: string | null,
   irreversible: boolean,
   claim?: string | null,
+  //the message the action was proposed under, and the digest of the tool's
+  // execution contract at that time. Both are kept by the store
+  epoch?: string | null,
+  contract?: string | null,
   expires?: Date | string | null,
   created: Date | string,
   updated: Date | string
@@ -275,6 +279,19 @@ export type AgentUsage = {
   inputTokens: number,
   outputTokens: number,
   turns: number,
+  created: Date | string,
+  updated: Date | string
+};
+
+//a lock the store keeps for the agent: the one provider call at a time a
+// person may have under a daily limit, or the right to store a message or run
+// an approved action in a thread. Only the store reads or changes it
+export type AgentLock = {
+  id: string,
+  profileId: string,
+  holder?: string | null,
+  epoch?: string | null,
+  since?: Date | string | null,
   created: Date | string,
   updated: Date | string
 };
@@ -573,6 +590,7 @@ export type RefusalReason =
   | 'invalid'
   | 'not_found'
   | 'conflict'
+  | 'busy'
   | 'limit'
   | 'csrf'
   | 'unavailable';
@@ -665,3 +683,18 @@ export type CsrfPlugin = {
   valid(req: unknown, res: unknown): boolean,
   generate(res: unknown, ctx: unknown): string
 };
+
+//these runtime and store types are defined beside the code that uses them, and
+// the package root exports them. They are re-exported here so this file keeps
+// the full list of public types.
+export type { AgentRuntime, RuntimeOptions, Sink } from './scripts/agent.js';
+export type {
+  Admission,
+  AgentStore,
+  Approval,
+  Gate,
+  NewAction,
+  NewTurn,
+  Outcome,
+  Usage
+} from './scripts/store.js';

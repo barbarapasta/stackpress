@@ -1,11 +1,14 @@
+//node
+import { randomUUID } from 'node:crypto';
 //modules
 import type { HttpServer } from '@stackpress/ingest';
 import type { DesktopMenuContribution } from 'stackpress-desktop/types';
-import { contributeDesktopMenu } from 'stackpress-desktop/plugin';
-import { randomUUID } from 'node:crypto';
 import { caller, contributeTool, undoing } from 'stackpress-ai';
+import { contributeDesktopMenu } from 'stackpress-desktop/plugin';
+//app
 import type { Config } from '../../config/common.js';
 import { tools, useOffline } from './agent.js';
+import { publish, remove, unpublish } from './events.js';
 
 const desktopMenu: DesktopMenuContribution = {
   id: 'blog:open-latest-posts',
@@ -52,6 +55,10 @@ export default function plugin(server: HttpServer<Config>) {
         contributeTool(ctx, tool);
       }
     });
+    //the events behind the agent tools that change records
+    server.on('app-article-publish', publish);
+    server.on('app-article-unpublish', unpublish);
+    server.on('app-comment-remove', remove);
     server.on('app-site-info', ({ req, res, ctx }) => {
       res.results({
         name: ctx.config.path('mcp.name', 'Blog'),

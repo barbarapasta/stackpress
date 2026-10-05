@@ -138,4 +138,3 @@ prediction item 1.2 tests.
   Approvals result has, and results of `user-access-command` carry no such id.
   And: the largest real request's detail read reaches the model with its
   revision intact. From: GAP-007, J-001, task 5 notes.
-

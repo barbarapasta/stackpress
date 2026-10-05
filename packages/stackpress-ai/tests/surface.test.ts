@@ -5,6 +5,7 @@ import { fileURLToPath } from 'node:url';
 //modules
 import { expect } from 'chai';
 import { describe, it } from 'mocha';
+import ts from 'typescript';
 //client
 import * as root from '../src/index.js';
 import * as adapters from '../src/adapters/index.js';
@@ -17,9 +18,25 @@ import * as scripts from '../src/scripts/index.js';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const base = path.join(here, '..');
-const manifest = JSON.parse(readFileSync(path.join(base, 'package.json'), 'utf8'));
-const exported = Object.entries(manifest.exports) as [ string, any ][];
-const paths = exported.filter(([ , target ]) => typeof target === 'object');
+
+//this is the part of package.json that these tests read
+type Target = { require: string, import: string };
+type Manifest = {
+  exports: Record<string, string | Target>,
+  typesVersions: Record<string, Record<string, string[]>>,
+  files: string[],
+  dependencies: Record<string, string>,
+  peerDependencies: Record<string, string>,
+  peerDependenciesMeta: Record<string, { optional?: boolean }>
+};
+
+const manifest = JSON.parse(
+  readFileSync(path.join(base, 'package.json'), 'utf8')
+) as Manifest;
+const exported = Object.entries(manifest.exports);
+const paths = exported.filter(
+  (entry): entry is [ string, Target ] => typeof entry[1] === 'object'
+);
 
 describe('the package manifest', () => {
   it('exports exactly the promised paths', () => {
@@ -149,5 +166,102 @@ describe('the subpath barrels', () => {
       'ProviderError', 'createAdapter', 'default', 'loaders', 'toProviderError'
     ]);
     expect(adapters.default).to.equal(adapters.createAdapter);
+  });
+});
+
+//--------------------------------------------------------------------//
+// Public types
+
+//this compiles a small consumer the way an app would and returns the type
+// errors found in that consumer only. A relative import reads the source; the
+// package name resolves through the manifest to the built declarations. The
+// consumer is a virtual file, so nothing is written to disk.
+function compile(code: string) {
+  const file = path.join(base, 'tests', 'consumer.virtual.ts');
+  const options: ts.CompilerOptions = {
+    strict: true,
+    noEmit: true,
+    skipLibCheck: true,
+    jsx: ts.JsxEmit.ReactJSX,
+    target: ts.ScriptTarget.ES2022,
+    module: ts.ModuleKind.ESNext,
+    moduleResolution: ts.ModuleResolutionKind.Node10,
+    types: [ 'node' ]
+  };
+  const host = ts.createCompilerHost(options);
+  const read = host.getSourceFile.bind(host);
+  host.getSourceFile = (name, language, ...rest) => name === file
+    ? ts.createSourceFile(name, code, language)
+    : read(name, language, ...rest);
+  const program = ts.createProgram([ file ], options, host);
+
+  //the root re-exports from the types file, and an export it cannot find is
+  // an error in the root, not in the consumer, so the root is read as well
+  return [ file, path.join(base, 'src', 'index.ts') ]
+    .map(name => program.getSourceFile(name))
+    .filter((source): source is ts.SourceFile => source !== undefined)
+    .flatMap(source => ts.getPreEmitDiagnostics(program, source))
+    .map(item => ts.flattenDiagnosticMessageText(item.messageText, '\n'));
+}
+
+//these types are named in the signatures of the root's public values, so a
+// consumer has to be able to name them
+const named = [
+  'AgentLock', 'McpSessionMode', 'ProviderOptions', 'ResolvedResponse',
+  'ToolRequest'
+];
+
+//these are defined beside the runtime and the store, and exported by the root
+const defined = [
+  'AgentRuntime', 'RuntimeOptions', 'Sink',
+  'Admission', 'AgentStore', 'Approval', 'Gate', 'NewAction', 'NewTurn',
+  'Outcome', 'Usage'
+];
+
+//these are the two ways an app reaches the types: the source of this package,
+// which is always there, and the declarations the build emits, which the
+// manifest points at and an installed package ships. Both must name them.
+describe('the public types', function() {
+  //compiling loads the type libraries, which takes a while
+  this.timeout(120000);
+
+  //the same consumer is compiled against each way in
+  const entries = [
+    [ 'the source root', '../src/index.js' ],
+    [ 'the source types path', '../src/types.js' ],
+    [ 'the built package root', 'stackpress-ai' ],
+    [ 'the built types path', 'stackpress-ai/types' ]
+  ];
+
+  for (const [ entry, from ] of entries) {
+    const built = !from.startsWith('.');
+
+    it(`names every promised type from ${entry}`, () => {
+      //the built declarations come from `yarn build` in this package, which
+      // the root build runs before the suite. A missing build is a failure
+      // that says so, never a test that quietly does not run
+      if (built) {
+        expect(
+          existsSync(path.join(base, 'cjs', 'types.d.ts')),
+          'run `yarn build` in packages/stackpress-ai before this test'
+        ).to.equal(true);
+      }
+      const names = [ ...named, ...defined ];
+      //a generic type has to be given its argument to be used
+      const used = names.map(name => name === 'ResolvedResponse'
+        ? 'ResolvedResponse<unknown>'
+        : name
+      );
+      const code = `import type { ${names.join(', ')} } from '${from}';\n`
+        + `export type Used = [ ${used.join(', ')} ];\n`;
+      expect(compile(code)).to.deep.equal([]);
+    });
+  }
+
+  it('keeps a private type private', () => {
+    const code = "import type { ClientTools } from '../src/index.js';\n"
+      + 'export type Used = ClientTools;\n';
+    const errors = compile(code).filter(text => text.includes('ClientTools'));
+    expect(errors).to.have.length(1);
   });
 });

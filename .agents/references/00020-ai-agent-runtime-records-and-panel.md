@@ -46,16 +46,22 @@ provider, in this order: person, input, thread owner, model, key and adapter,
 daily limit. It then stores the message and loops: send the stored transcript
 and the agent tools to the adapter, store the reply and its usage, run the tools
 the model asked for through `callTool` as the person. The limit is checked
-before every provider call, including those after an approval.
+before every provider call, including those after an approval. With a limit,
+a durable per-person slot admits one call at a time and records usage before
+releasing it. A single reply can overshoot; subsequent calls are refused.
 
 - Calls run in order. The first that needs approval becomes a pending action
   and stops the step; later calls are answered "not run". Every call gets a
   result because providers reject a call without one.
 - A bad input, an invented tool name, or a tool not offered is handed back to
   the model as a failed result, with no action logged.
+- A thread lock serializes message storage, proposals and writes. A new
+  accepted message replaces its current token; old replies cannot propose or
+  execute actions. A message arriving during a write is refused with `409`.
 - Nothing is held in memory across a pause. The transcript is rebuilt from
   stored turns, and a result that depended on an approval is read from its
-  action, so any server can resume and no turn is edited.
+  action, including a completed inverse and its result, so any server can resume
+  and no turn is edited. History is paginated to its end, not capped at 1,000.
 - A provider's own error text goes to the runtime log only; the person sees fixed
   text. Page hints are cut to a fixed size, labelled as hints, never stored, and
   never used for a decision.
@@ -69,7 +75,10 @@ A tool needs approval when it is `irreversible`, or when it writes
 else runs at once and is logged. Approve, decline, and undo each re-check the
 sign-in and load the action for its owner only; another person's action answers
 like a missing one. Each is claimed first (one guarded `UPDATE`) so a double
-click runs the tool once, and a repeat returns the stored record.
+click runs the tool once, and a repeat returns the stored record. Pending
+proposals carry an execution-contract digest. A changed event, method, fixed
+data, input schema or undo contract fails without running; a proposal without
+a digest also requires a fresh proposal.
 
 Undo exists only for a done action whose tool still names a registered `inverse`;
 an approved irreversible action has none. It runs the declared inverse with the original action's stored input, as the
@@ -100,17 +109,23 @@ status and a reason. The app's access lists must allow `/agent/**`.
 ## Stored Records
 
 `stackpress-ai/schema.idea` (shipped in `files`, not in `exports`) declares
-`AgentThread`, `AgentTurn`, `AgentAction`, `AgentUsage`, and reverse relations on
+`AgentThread`, `AgentTurn`, `AgentAction`, `AgentUsage`, `AgentLock`, and
+reverse relations on
 `Profile`; an app adds `use "stackpress-ai/schema.idea"`, regenerates, and
 pushes. `createStore` (`src/scripts/store.ts`) reads and plainly writes through
 the generated events and makes claims with single guarded `UPDATE` statements on
 the `database` plugin, reading the winner back by a token.
 
+- `AgentLock` holds a per-person provider slot and per-thread gate/current
+  token. Locks never expire or get stolen automatically. A crash or failed
+  usage write can leave a holder; recovery requires stopping the old worker,
+  checking its outcome and accounting, then clearing that specific holder
+  directly in the database. Generated writes cannot clear it.
 - Turns are append only in the store; actions are the audit log; usage is one
   row per person and UTC day, incremented in the database.
 - `guardRecords` (`src/events/guard.ts`) registers listeners at priority 1000,
   above the generated listeners at 0, that answer 403 and stop the queue for
-  every generated write on turns, actions, and usage except create, and for
+  every generated write on turns, actions, usage and locks except create, and for
   thread purge. Create is allowed only while the store runs it, marked by an
   `AsyncLocalStorage` scope. Generated admin pages call those events, so they
   cannot edit or delete the log. A listener above priority 1000 would run first.
@@ -157,7 +172,8 @@ pins it. Public: `.`, `adapters`, `client`, `events`, `events/{index,http,sse,st
 `types`, and `styles.css`. Other source files, `pages/`, and `package.json` are
 not importable. The root is server-only: the plugin, `createMcpServer`,
 `contributeTool`, `caller`, `undoing`, `createRuntime`, `watch`, `createStore`,
-`AGENT_EVENTS`, `CONTEXT_EVENT`, and the public types. `react`, the two SDKs,
+`AGENT_EVENTS`, `CONTEXT_EVENT`, and the public types. Shared server types are exposed from both the root and `types`; browser panel
+types stay on `client`. `react`, the two SDKs,
 and `ts-morph` (needed by `transform`) are optional peer dependencies.
 
 **CommonJS caveat:** in `stackpress-ai`, `schema`, `sql`, `view`, and `admin`,

@@ -1,6 +1,5 @@
 //modules
 import type { HttpServer } from '@stackpress/ingest';
-import { createRuntime } from 'stackpress-ai';
 import type {
   Adapter,
   AdapterReply,
@@ -10,14 +9,19 @@ import type {
   ToolConfig,
   ToolResolverServer
 } from 'stackpress-ai';
+import { createRuntime } from 'stackpress-ai';
+//app
 import type { Config } from '../../config/common.js';
 
 //--------------------------------------------------------------------//
 // Tools
 
-//The tools the agent may use, over events the blog already has. Each is
-//marked for the agent. They are also `user` tools with a scope, so an MCP
-//client needs a user key with that scope to see them.
+//The tools the agent may use. Each is marked for the agent. The ones that
+//change records run app events (events.ts) that check the access of the
+//admin page for the same action before they run, so the agent never does
+//more than the person could do themselves. They are also `user` tools with a
+//scope, so an MCP client needs a user key with that scope to see them, and
+//that key's profile roles must allow the action too.
 export const tools: ToolConfig[] = [
   {
     name: 'article_find',
@@ -42,8 +46,7 @@ export const tools: ToolConfig[] = [
     type: 'user',
     scopes: [ 'articles.write' ],
     method: 'PUT',
-    event: 'article-update',
-    data: { status: 'PUBLISHED' },
+    event: 'app-article-publish',
     agent: true,
     inverse: 'article_unpublish',
     input: {
@@ -58,12 +61,11 @@ export const tools: ToolConfig[] = [
   {
     name: 'article_unpublish',
     title: 'Unpublish Article',
-    description: 'Moves an article back to draft by id.',
+    description: 'Puts an article back to the status it had before it was published.',
     type: 'user',
     scopes: [ 'articles.write' ],
     method: 'PUT',
-    event: 'article-update',
-    data: { status: 'DRAFT' },
+    event: 'app-article-unpublish',
     input: {
       type: 'object',
       required: [ 'id' ],
@@ -112,11 +114,11 @@ export const tools: ToolConfig[] = [
   {
     name: 'comment_delete',
     title: 'Delete Comment',
-    description: 'Permanently deletes a comment by id.',
+    description: 'Removes a comment by id. It is deactivated, not erased.',
     type: 'user',
     scopes: [ 'comments.write' ],
     method: 'DELETE',
-    event: 'comment-remove',
+    event: 'app-comment-remove',
     agent: true,
     irreversible: true,
     input: {
@@ -169,16 +171,28 @@ export function script(turns: AdapterTurn[]): AdapterReply {
   const step = turns.slice(at + 1).filter(turn => turn.role === 'assistant').length;
   const last = turns[turns.length - 1];
   const id = `offline-${at}-${step}`;
+  //what the last tool call came back with. A refusal or a failure is said
+  // as it is, and nothing after it runs
+  const results = last.role === 'tool' ? last.results : [];
+  const declined = results.some(result => /declined/.test(result.output));
+  const failure = results.find(result => result.isError && !/declined/.test(result.output));
   //"issue a receipt for pokemon" issues one, then says so
   if (!article) {
-    return step === 0
-      ? reply('', [ { id, name: 'sample_receipt_issue', input: { article: receipt } } ])
-      : reply(`Issued a receipt for ${receipt}.`);
+    if (step === 0) {
+      return reply('', [ { id, name: 'sample_receipt_issue', input: { article: receipt } } ]);
+    }
+    return reply(failure
+      ? `I could not issue a receipt for ${receipt}. ${failure.output}`
+      : `Issued a receipt for ${receipt}.`
+    );
   }
   if (step === 0) {
     return reply(
       '', [ { id, name: 'article_publish', input: { id: article } } ]
     );
+  }
+  if (step === 1 && failure) {
+    return reply(`I could not publish ${article}. ${failure.output}`);
   }
   if (step === 1 && comment) {
     return reply(
@@ -186,8 +200,9 @@ export function script(turns: AdapterTurn[]): AdapterReply {
       [ { id, name: 'comment_delete', input: { id: comment } } ]
     );
   }
-  const declined = last.role === 'tool'
-    && last.results.some(result => /declined/.test(result.output));
+  if (failure) {
+    return reply(`I could not delete comment ${comment}. ${failure.output}`);
+  }
   return reply(
     declined
       ? 'Understood. I left the comment alone.'
@@ -213,9 +228,13 @@ const offline: Adapter = {
 /**
  * Replace the agent runtime with one that falls back to the offline model
  * for a provider whose key is not set in the environment. A key that is set
- * goes to the real provider as usual.
+ * goes to the real provider as usual. Pass another environment to decide
+ * which keys count as set, as the tests do with an empty one.
  */
-export function useOffline(ctx: HttpServer<Config>) {
+export function useOffline(
+  ctx: HttpServer<Config>,
+  environment: Record<string, string | undefined> = process.env
+) {
   const server = ctx as unknown as ToolResolverServer;
   const config = ctx.config.path<AgentConfig>('agent');
   const real = createRuntime(server);
@@ -226,7 +245,7 @@ export function useOffline(ctx: HttpServer<Config>) {
   for (const { key } of Object.values(config?.providers || {})) {
     Object.defineProperty(env, key, {
       enumerable: true,
-      get: () => process.env[key] || OFFLINE
+      get: () => environment[key] || OFFLINE
     });
   }
 

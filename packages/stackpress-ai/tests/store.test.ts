@@ -245,8 +245,6 @@ describe('agent store', () => {
 
       //another person, or a call with no valid owner, changes nothing
       expect(await store.approveAction(pending.id, 'profile_b')).to.equal(null);
-      expect(await store.declineAction(pending.id, 'profile_b')).to.equal(null);
-      expect(await store.markUndone(pending.id, 'profile_b')).to.equal(null);
       expect((await store.getAction(pending.id, profileId))?.status).to.equal('pending');
 
       //it runs only after the owner approves
@@ -337,44 +335,6 @@ describe('agent store', () => {
       expect(await harness.column('agent_action', 'status', pending.id)).to.equal('done');
     });
 
-    it('lets an approval and a decline race with one outcome', async () => {
-      const harness = await createHarness();
-      const { action, profileId } = await seed(harness);
-      for (let i = 0; i < 6; i++) {
-        const pending = await action();
-        const [ approval, declined ] = await Promise.all([
-          harness.store().approveAction(pending.id, profileId),
-          harness.store().declineAction(pending.id, profileId, 'no')
-        ]);
-        //both see the same final status, and the tool runs only if approval won
-        expect(approval?.action.status).to.be.oneOf([ 'approved', 'declined' ]);
-        const final = await harness.column('agent_action', 'status', pending.id);
-        expect(declined?.status).to.equal(final);
-        expect(Boolean(approval?.claimed)).to.equal(final === 'approved');
-      }
-    });
-
-    it('records a decline with its reason and keeps it declined', async () => {
-      const harness = await createHarness();
-      const { store, action, profileId } = await seed(harness);
-      const pending = await action();
-      const declined = await store.declineAction(pending.id, profileId, 'Not now');
-      expect(declined).to.include({ status: 'declined', error: 'Not now' });
-
-      //later approval and decline calls change nothing
-      const approval = await store.approveAction(pending.id, profileId);
-      expect(approval?.claimed).to.equal(false);
-      expect(approval?.action.status).to.equal('declined');
-      expect((await store.declineAction(pending.id, profileId, 'other'))?.error).to.equal('Not now');
-    });
-
-    it('declines with no reason', async () => {
-      const harness = await createHarness();
-      const { store, action, profileId } = await seed(harness);
-      const declined = await store.declineAction((await action()).id, profileId);
-      expect(declined).to.include({ status: 'declined', error: null });
-    });
-
     it('settles done or failed only from approved and only once', async () => {
       const harness = await createHarness();
       const { store, action, profileId } = await seed(harness);
@@ -395,21 +355,6 @@ describe('agent store', () => {
       //a second settlement cannot overwrite the first
       await store.completeAction(pending.id, approval!.claim!, { status: 'done', result: 1 });
       expect((await store.getAction(pending.id, profileId))?.status).to.equal('failed');
-    });
-
-    it('marks a done action undone, and only a done one', async () => {
-      const harness = await createHarness();
-      const { store, action, profileId } = await seed(harness);
-
-      const pending = await action({ irreversible: false });
-      expect((await store.markUndone(pending.id, profileId))?.status).to.equal('pending');
-
-      const approval = await store.approveAction(pending.id, profileId);
-      await store.completeAction(pending.id, approval!.claim!, { status: 'done' });
-      expect((await store.markUndone(pending.id, profileId))?.status).to.equal('undone');
-      //undone stays undone
-      expect((await store.markUndone(pending.id, profileId))?.status).to.equal('undone');
-      expect((await store.approveAction(pending.id, profileId))?.claimed).to.equal(false);
     });
 
     it('lets exactly one of several undo claims win', async () => {

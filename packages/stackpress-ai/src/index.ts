@@ -8,8 +8,9 @@
 // code. It pulls in the MCP server and the agent, which are server only.
 
 //these public types describe the config, auth, adapter and record contracts
-// that downstream callers use when they configure the package. The full list
-// of types stays available from `stackpress-ai/types`.
+// that downstream callers use when they configure the package. Public server
+// types are also available from `stackpress-ai/types`; panel types live in
+// `stackpress-ai/client`.
 export type {
   ActionStatus,
   Adapter,
@@ -23,26 +24,40 @@ export type {
   AdapterToolResult,
   AdapterTurn,
   AdapterUsage,
+  Admission,
   AgentAction,
   AgentConfig,
   AgentEvent,
   AgentHints,
+  AgentLock,
   AgentModelConfig,
   AgentProvider,
+  AgentRuntime,
+  AgentStore,
   AgentThread,
   AgentTurn,
   AgentUsage,
   AnthropicOptions,
+  Approval,
   AuthContext,
   Caller,
+  Gate,
   JsonSchema,
   McpConfig,
+  McpSessionMode,
+  NewAction,
+  NewTurn,
   NormalizedToolConfig,
   OpenAIOptions,
   OpenRouterOptions,
+  Outcome,
   ProviderErrorKind,
+  ProviderOptions,
   Refusal,
   RefusalReason,
+  ResolvedResponse,
+  RuntimeOptions,
+  Sink,
   StoreOptions,
   StubOptions,
   StubReply,
@@ -52,13 +67,15 @@ export type {
   ThreadTurn,
   Token,
   ToolConfig,
+  ToolRequest,
   ToolResolverServer,
   ToolResult,
   TurnInput,
   TurnResult,
   TurnStatus,
   UndoResult,
-  Undoing
+  Undoing,
+  Usage
 } from './types.js';
 
 //these exports expose the plugin entrypoint and MCP factory at the package
@@ -71,15 +88,7 @@ export { caller, contributeTool, undoing } from './scripts/tools.js';
 //the agent runtime, the reports it sends while a turn runs, and the store
 // that keeps its records
 export { createRuntime, watch } from './scripts/agent.js';
-export type { AgentRuntime, RuntimeOptions, Sink } from './scripts/agent.js';
 export { createStore } from './scripts/store.js';
-export type {
-  AgentStore,
-  Approval,
-  NewAction,
-  NewTurn,
-  Outcome
-} from './scripts/store.js';
 //the names of the events an app resolves or listens for
 export { AGENT_EVENTS, CONTEXT_EVENT } from './events/helpers.js';
 export { default } from './plugin.js';

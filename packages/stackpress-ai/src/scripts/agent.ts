@@ -1,3 +1,5 @@
+//node
+import { createHash } from 'node:crypto';
 //modules
 import type { SessionPlugin } from 'stackpress-session/types';
 //client
@@ -19,10 +21,10 @@ import type {
   RefusalReason,
   ToolResolverServer
 } from '../types.js';
+import type { AgentStore } from './store.js';
 import { isRecord } from '../helpers.js';
 import { createAdapter } from '../adapters/index.js';
 import { createStore } from './store.js';
-import type { AgentStore } from './store.js';
 import { collectTools } from './tools.js';
 
 //--------------------------------------------------------------------//
@@ -77,6 +79,14 @@ const MAX_MESSAGE = 20000;
 const MAX_FILES = 20;
 const MAX_FILE = 500;
 const MAX_HINTS = 4000;
+
+//why a message or an approval was turned away, and how to try again
+export const BUSY = 'Another request of yours is still being answered. '
+  + 'Try again in a moment.';
+export const RUNNING = 'An action in this thread is still running. '
+  + 'Try again when it has finished.';
+export const SUPERSEDED = 'Not run. A newer message replaced the one this '
+  + 'was asked under.';
 
 const WAITING = 'Waiting for the person to approve this action. '
   + 'It has not run.';
@@ -352,6 +362,26 @@ export function needsApproval(tool: NormalizedToolConfig) {
 }
 
 /**
+ * The digest of what running a tool means: the event, the method, the data
+ * the app set for it, the input it accepts, and whether and how it can be
+ * reversed. A proposal keeps it, and an approval runs only a tool whose
+ * digest is still the same, because a person approved what was shown to
+ * them, not whatever the name resolves to later. Titles and descriptions are
+ * not part of it.
+ */
+export function contractOf(tool: NormalizedToolConfig) {
+  return createHash('sha256').update(canonical({
+    event: tool.event,
+    method: tool.method,
+    data: tool.data,
+    input: tool.input ?? null,
+    inverse: tool.inverse ?? null,
+    irreversible: tool.irreversible === true,
+    operation: tool.operation ?? null
+  })).digest('hex');
+}
+
+/**
  * Describe the page hints for the model. They are cut to a fixed size and
  * labelled as hints, because the browser supplied them.
  */
@@ -423,11 +453,19 @@ export function resetsAt(at: Date) {
 }
 
 /**
+ * The daily limit in tokens, or null when there is none.
+ */
+export function limitOf(rt: AgentRuntime) {
+  const limit = Number(rt.config.limit);
+  return Number.isFinite(limit) && limit > 0 ? limit : null;
+}
+
+/**
  * When the person is at the daily limit, the time it resets, else null.
  */
 export async function limited(rt: AgentRuntime, profileId: string) {
-  const limit = Number(rt.config.limit);
-  if (!Number.isFinite(limit) || limit <= 0) return null;
+  const limit = limitOf(rt);
+  if (!limit) return null;
   const usage = await rt.store.getUsage(profileId);
   return usage.inputTokens + usage.outputTokens >= limit
     ? resetsAt(rt.now())
@@ -511,6 +549,22 @@ export function buildTranscript(turns: AgentTurn[], actions: AgentAction[]) {
 // Helpers
 
 /**
+ * JSON with the keys of every object in order, so equal values give equal
+ * text however their keys were written.
+ */
+function canonical(value: unknown): string {
+  if (Array.isArray(value)) {
+    return `[${value.map(canonical).join(',')}]`;
+  }
+  if (isRecord(value)) {
+    return `{${Object.keys(value).sort().map(
+      key => `${JSON.stringify(key)}:${canonical(value[key])}`
+    ).join(',')}}`;
+  }
+  return JSON.stringify(value) ?? 'null';
+}
+
+/**
  * The answer to a call that waited for approval, from the action as it
  * stands now. A result with no action is returned as stored.
  */
@@ -532,9 +586,14 @@ function refresh(
         output: 'The person approved this action and it is running.'
       };
     case 'done':
-    case 'undone':
       return {
         id: result.id, name: result.name, output: render(action.result)
+      };
+    case 'undone':
+      return {
+        id: result.id,
+        name: result.name,
+        output: `${render(action.result)}\n\n${undoNotice(action, actions)}`
       };
     case 'failed':
       return {
@@ -561,6 +620,26 @@ function refresh(
         isError: true
       };
   }
+}
+
+/**
+ * Tell the model that the person undid an action, from the action that
+ * reversed it. The result above stays as it was reported, since it is what
+ * happened then, and this says what has happened to it since.
+ */
+function undoNotice(
+  action: AgentAction,
+  actions: Map<string, AgentAction>
+) {
+  const inverse = Array.from(actions.values()).find(candidate => (
+    candidate.reverses === action.id && candidate.status === 'done'
+  ));
+  return inverse
+    ? 'NOTE: The person later undid this action, so it no longer stands. '
+      + `It was reversed by "${inverse.tool}", which returned: `
+      + render(inverse.result)
+    : 'NOTE: The person asked to undo this action. The undo is in progress, '
+      + 'so do not rely on it.';
 }
 
 /**

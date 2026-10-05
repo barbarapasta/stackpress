@@ -28,7 +28,8 @@
     "push": "dotenv -e .env -- stackpress push --b config/develop -v",
     "query": "dotenv -e .env -- stackpress query --b config/develop -v",
     "serve": "stackpress serve --b config/production -v",
-    "test": "node --import tsx --test tests/**/*.test.ts"
+    "test": "node --import tsx --test tests/**/*.test.ts",
+    "test:clean": "yarn generate && yarn test"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "0.131.0",

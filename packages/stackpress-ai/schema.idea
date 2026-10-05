@@ -18,6 +18,7 @@ model Profile {
   agentThreads  AgentThread[] @label("Agent Threads")
   agentActions  AgentAction[] @label("Agent Actions")
   agentUsage    AgentUsage[]  @label("Agent Usage")
+  agentLocks    AgentLock[]   @label("Agent Locks")
 }
 
 model AgentThread
@@ -326,6 +327,12 @@ model AgentAction
   claim       String?
               @description("Internal. Set by the store when an approval claims the action.")
 
+  epoch       String?
+              @description("Internal. Token of the thread's newest message when the action was proposed. The action can only be claimed while that token is still the thread's current one.")
+
+  contract    String?
+              @description("Internal. Digest of the tool's execution contract when the action was proposed. An approval runs only a tool that still matches it.")
+
   expires     Datetime?
               @label("Expires")
               @sortable
@@ -417,6 +424,70 @@ model AgentUsage
                 @list.number @view.number
                 @description("Assistant turns counted that day.")
                 @examples(14)
+
+  created       Datetime
+                @label("Created")
+                @default("now()") @sortable
+                @list.date("m d, Y h:iA")
+                @view.date("m d, Y h:iA")
+                @description("Generated timestamp when row was created.")
+                @examples("2025-10-01T12:00:00Z")
+
+  updated       Datetime
+                @label("Updated")
+                @default("now()") @timestamp @sortable
+                @list.date("m d, Y h:iA")
+                @view.date("m d, Y h:iA")
+                @description("Generated timestamp that is updated whenever the row has changed.")
+                @examples("2025-10-01T12:00:00Z")
+
+  profile       Profile
+                @relation({ local "profileId" foreign "id" })
+}
+
+model AgentLock
+  @labels("Agent Lock" "Agent Locks")
+  @display("{{id}}")
+  @icon("lock")
+  @query("*" "profile.*")
+{
+  id            String
+                @label("ID")
+                @id
+                @list.string @view.string
+                @description("What is locked: `profile:` and a profile id for the one provider call at a time a person may have under a daily limit, or `thread:` and a thread id for the right to store a message or run an approved action in a thread.")
+                @examples("thread:g3iuej3tg8bcf7e2lidz7pjf")
+
+  profileId     String
+                @label("Profile")
+                @field.relation({
+                  id "id"
+                  search "/admin/profile/search?json&q={{query}}"
+                  template "{{name}}"
+                })
+                @is.required("Profile is required")
+                @filter.relation({
+                  id "id"
+                  search "/admin/profile/search?json&q={{query}}"
+                  template "{{name}}"
+                })
+                @list.template({ template "{{profile.name}}" })
+                @view.template({ template "{{profile.name}}" })
+                @description("The person the lock belongs to.")
+                @examples("pjfdz7tg8bcf7e2lig3iuej3")
+
+  holder        String?
+                @description("Internal. Token of the call that holds the lock, empty when free. A lock is never taken over: when a process stopped while holding one, the operator clears this value once the work is known to be over.")
+
+  epoch         String?
+                @description("Internal. On a thread lock, the token of the newest message stored in the thread. Work proposed under any other token has been replaced by a newer message. It is compared for equality only.")
+
+  since         Datetime?
+                @label("Held Since")
+                @list.date("m d, Y h:iA")
+                @view.date("m d, Y h:iA")
+                @description("When the holder took the lock, to tell an operator which ones are old.")
+                @examples("2025-10-01T12:00:00Z")
 
   created       Datetime
                 @label("Created")

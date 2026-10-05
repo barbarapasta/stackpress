@@ -8,9 +8,9 @@ import type {
   ThreadTurn,
   ToolRequest
 } from '../types.js';
+import type { AgentRuntime } from './agent.js';
 import { isRecord } from '../helpers.js';
 import { inverseOf, offered, person, pick, refuse, resetsAt } from './agent.js';
-import type { AgentRuntime } from './agent.js';
 import { collectTools } from './tools.js';
 
 //--------------------------------------------------------------------//

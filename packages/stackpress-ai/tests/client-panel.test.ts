@@ -238,6 +238,7 @@ describe('the panel controller', () => {
         [ refusal(400, 'invalid'), 'invalid', undefined ],
         [ refusal(404, 'not_found'), 'not-found', undefined ],
         [ refusal(409, 'conflict'), 'conflict', undefined ],
+        [ refusal(409, 'busy'), 'busy', undefined ],
         [ new Response('<html/>', { status: 403 }), 'forbidden', undefined ],
         [ refusal(500, 'unavailable'), 'failed', undefined ],
         [ new Response('x', { status: 200, headers: { 'content-type': 'text/plain' } }), 'failed', undefined ]
@@ -254,6 +255,32 @@ describe('the panel controller', () => {
         //the server's own words are nowhere in what the page holds
         expect(JSON.stringify(state())).to.not.include('raw server words');
       }
+    });
+
+    it('keeps the words and lets the person send them again when the chat is busy', async () => {
+      let tries = 0;
+      const { panel, state, fake } = await opened({
+        [TURN]: () => ++tries === 1
+          ? refusal(409, 'busy')
+          : events(textRun('Hello back.'))
+      });
+      panel.setDraft('Please help');
+      await panel.send();
+
+      //busy is its own message, not the one for a request already handled
+      expect(state().notice).to.deep.equal({ code: 'busy' });
+      expect(state().draft).to.equal('Please help');
+      expect(state().conversation.items).to.deep.equal([]);
+      expect(state().running).to.equal(false);
+      expect(state().phase).to.equal('ready');
+
+      //the same words go again, and this time they are answered
+      await panel.send();
+      expect(fake.count('POST', '/agent/turn')).to.equal(2);
+      expect(state().notice).to.equal(undefined);
+      expect(state().draft).to.equal('');
+      expect(state().conversation.items.map(item => item.kind))
+        .to.deep.equal([ 'user', 'agent' ]);
     });
 
     it('moves to the daily limit state, with when it resets, when the message is refused for the limit', async () => {
@@ -408,6 +435,28 @@ describe('the panel controller', () => {
       expect(card(state(), 'a2').status).to.equal('declined');
       expect(last(state())).to.deep.include({ text: 'Understood.' });
       expect(state().announce).to.deep.include({ code: 'declined' });
+    });
+
+    it('leaves the card waiting, with the busy message, when the chat is busy, and approves on a retry', async () => {
+      let tries = 0;
+      const { panel, state, fake } = await waiting({
+        'POST /agent/actions/a2/approve': () => ++tries === 1
+          ? refusal(409, 'busy')
+          : events([
+            { type: 'action-done', actionId: 'a2', tool: 'note_remove', input: { id: 'n1' }, result: {} },
+            { type: 'finished', status: 'done' }
+          ])
+      });
+      await panel.approve('a2');
+
+      //the action did not run, so it can still be answered
+      expect(card(state(), 'a2')).to.deep.include({ status: 'waiting', busy: undefined });
+      expect(state().notice).to.deep.equal({ code: 'busy' });
+      expect(state().running).to.equal(false);
+
+      await panel.approve('a2');
+      expect(fake.count('POST', '/agent/actions/a2/approve')).to.equal(2);
+      expect(card(state(), 'a2').status).to.equal('done');
     });
 
     it('sends one request however many times Approve, Decline or Undo is clicked', async () => {

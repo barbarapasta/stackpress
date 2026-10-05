@@ -67,9 +67,9 @@ function createContext(config: Record<string, unknown> = {}) {
       return found ? { results: found } : null;
     }
     if (event === 'ping') {
-      return { results: 'pong' };
+      return { code: 200, results: 'pong' };
     }
-    return { results: { event, hits: [ 'one' ] } };
+    return { code: 200, results: { event, hits: [ 'one' ] } };
   }) as never;
   ctx.register('mcp', (auth?: never) => createMcpServer(
     ctx as unknown as ToolResolverServer,

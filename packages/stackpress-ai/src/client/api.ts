@@ -20,7 +20,7 @@ import type {
 
 //the reasons the chat routes name when they refuse
 const REASONS = [
-  'unauthorized', 'invalid', 'not_found', 'conflict', 'limit', 'csrf',
+  'unauthorized', 'invalid', 'not_found', 'conflict', 'busy', 'limit', 'csrf',
   'unavailable'
 ];
 

@@ -93,7 +93,11 @@ export function createCtxStub(options: StubOptions = {}) {
         return { results: session } as { results: T };
       }
 
-      return (resolves[event] || null) as { results: T } | null;
+      //an event that was given an answer answered it, so it is a 200 unless
+      // the answer says otherwise. An event with none is one nobody answered
+      const answer = resolves[event];
+      return (answer ? { code: 200, ...answer } : null) as
+        { results: T } | null;
     }
   };
 

@@ -35,7 +35,7 @@ const MAX_URL = 500;
 const MAX_ITEMS = 20;
 const MAX_ITEM = 1000;
 const REASONS = [
-  'unauthorized', 'invalid', 'not_found', 'conflict', 'limit', 'csrf',
+  'unauthorized', 'invalid', 'not_found', 'conflict', 'busy', 'limit', 'csrf',
   'unavailable'
 ];
 const FAILED = 'The agent could not finish that.';

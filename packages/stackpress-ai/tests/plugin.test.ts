@@ -1,5 +1,8 @@
 //node
+import { readFileSync } from 'node:fs';
 import { IncomingMessage, ServerResponse } from 'node:http';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 //modules
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js';
@@ -16,6 +19,8 @@ import type {
 } from '../src/types.js';
 import { caller } from '../src/scripts/tools.js';
 import { createApplication, createCtxStub } from './helpers.js';
+
+const here = path.dirname(fileURLToPath(import.meta.url));
 
 //this helper runs the plugin against a handler map and returns the listeners
 // it registered so each test can drive one of them.
@@ -275,6 +280,27 @@ describe('ai/package', () => {
   });
 
   it('should register the record guards ahead of the generated listeners whenever it is active', async () => {
+    //the records come from the schema the package ships, not from the guard
+    // code, so a record added there without a guard fails here. A thread is
+    // the person's to edit; every other record belongs to the store alone
+    const schema = readFileSync(
+      path.join(here, '..', 'schema.idea'),
+      'utf8'
+    );
+    const owned = Array.from(schema.matchAll(/^model (Agent[A-Za-z]+)/gm))
+      .map(match => match[1])
+      .filter(name => name !== 'AgentThread')
+      .map(name => name.replace(/([a-z])([A-Z])/g, '$1-$2').toLowerCase());
+    const verbs = [
+      'update', 'remove', 'restore', 'purge', 'upsert', 'batch'
+    ];
+
+    //a lock and a usage record are among them, and the thread is not
+    expect(owned).to.include.members([
+      'agent-turn', 'agent-action', 'agent-usage', 'agent-lock'
+    ]);
+    expect(owned).to.not.include('agent-thread');
+
     for (const config of [ { mcp: {} }, { agent: {} } ]) {
       const handlers = new Map<string, Function>();
       plugin({
@@ -284,16 +310,24 @@ describe('ai/package', () => {
       const ctx = createCtxStub({ config });
       await handlers.get('listen')!({ ctx });
 
-      //turns, actions and usage lose their six writes and their outside
-      // create, and a thread loses only its purge
-      expect(ctx.ranked).to.have.length(3 * 6 + 3 + 1);
-      expect(ctx.ranked).to.include.members([
-        'agent-turn-update', 'agent-action-remove', 'agent-usage-batch',
-        'agent-turn-create', 'agent-action-create', 'agent-usage-create',
+      //every owned record loses its six writes and its outside create, and a
+      // thread loses only its purge
+      expect(ctx.ranked).to.have.members([
+        ...owned.flatMap(model => [
+          ...verbs.map(verb => `${model}-${verb}`),
+          `${model}-create`
+        ]),
         'agent-thread-purge'
       ]);
+
+      //reads, and a thread's own edits, stay open
+      for (const model of owned) {
+        for (const verb of [ 'detail', 'search', 'get' ]) {
+          expect(ctx.ranked).to.not.include(`${model}-${verb}`);
+        }
+      }
       expect(ctx.ranked).to.not.include('agent-thread-update');
-      expect(ctx.ranked).to.not.include('agent-turn-search');
+      expect(ctx.ranked).to.not.include('agent-thread-create');
     }
   });
 
@@ -439,13 +473,25 @@ describe('ai/package', () => {
       await client.close();
     });
 
-    it('should answer null when the event returns nothing', async () => {
+    it('should answer null when the event answers with nothing', async () => {
+      const ctx = createCtxStub({ resolves: { ping: { results: null } } });
+      const client = await connect(ctx as unknown as ToolResolverServer, [ ping ]);
+
+      const result = await client.callTool({ name: 'ping' });
+
+      expect(result.isError).to.not.equal(true);
+      expect(result.content).to.deep.equal([{ type: 'text', text: 'null' }]);
+      await client.close();
+    });
+
+    it('should answer an error when nothing answers the event', async () => {
       const ctx = createCtxStub();
       const client = await connect(ctx as unknown as ToolResolverServer, [ ping ]);
 
       const result = await client.callTool({ name: 'ping' });
 
-      expect(result.content).to.deep.equal([{ type: 'text', text: 'null' }]);
+      expect(result.isError).to.equal(true);
+      expect(JSON.stringify(result.content)).to.contain('Tool call failed');
       await client.close();
     });
 

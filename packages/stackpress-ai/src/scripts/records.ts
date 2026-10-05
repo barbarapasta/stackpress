@@ -6,7 +6,8 @@ import { AsyncLocalStorage } from 'node:async_hooks';
 export const RECORD_MODELS = [
   'agent-turn',
   'agent-action',
-  'agent-usage'
+  'agent-usage',
+  'agent-lock'
 ] as const;
 
 //the generated write events nobody may call on those records. The store never
