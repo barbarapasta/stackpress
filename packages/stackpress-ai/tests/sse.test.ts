@@ -9,7 +9,9 @@ import {
   McpSseServer,
   resolveSseConfig
 } from '../src/scripts/sse.js';
+import { normalizeTool } from '../src/helpers.js';
 import {
+  createApplication,
   createMockRequest,
   expectJson,
   MockResponse
@@ -78,12 +80,12 @@ class TestSseServer extends McpSseServer {
    * Create one fake SSE session and immediately write a handshake response.
    */
   protected override async _handleSseConnection(
-    req: IncomingMessage,
-    res: ServerResponse
+    _req: IncomingMessage,
+    res: ServerResponse,
+    auth: AuthContext
   ) {
     this.created++;
     const sessionId = `sse-${this.created}`;
-    const auth = await this._authResolver(req);
     const server = {
       close: async () => undefined
     };
@@ -121,10 +123,29 @@ class TestSseServer extends McpSseServer {
   }
 }
 
+//this registry holds one scoped write tool and one public tool so the 403
+// path can be told apart from a tool that does not exist.
+const registry = async () => [
+  normalizeTool({
+    name: 'article_publish',
+    event: 'article-publish',
+    type: 'app',
+    method: 'POST',
+    scopes: [ 'articles.write' ]
+  })!,
+  normalizeTool({
+    name: 'public_ping',
+    event: 'public-ping',
+    type: 'public',
+    method: 'GET'
+  })!
+];
+
 function makeServer(
   authResolver: (req: IncomingMessage) => Promise<AuthContext> = async () => {
     return { kind: 'public' };
-  }
+  },
+  loader: typeof registry | null = registry
 ) {
   return new TestSseServer(
     async () => null,
@@ -138,9 +159,42 @@ function makeServer(
       reject: error => {
         throw error;
       }
-    }
+    },
+    loader ?? undefined
   );
 }
+
+//this caller holds one scope and presents the secret, so it is verified but
+// lacks articles.write.
+const reader = (): AuthContext => ({
+  kind: 'app',
+  token: { token: 'app_1:secret', id: 'app_1', secret: 'secret' },
+  application: createApplication({ scopes: [ 'articles.read' ] })
+});
+
+//this request helper posts one JSON-RPC body to the message endpoint
+function post(body: unknown, session = 'sse-1') {
+  return createMockRequest({
+    method: 'POST',
+    url: `/messages?sessionId=${session}`,
+    headers: { host: 'localhost', 'content-type': 'application/json' },
+    body: JSON.stringify(body)
+  });
+}
+
+const callTool = (name: string) => ({
+  jsonrpc: '2.0',
+  id: 9,
+  method: 'tools/call',
+  params: { name, arguments: {} }
+});
+
+//this request helper opens the event stream
+const connect = () => createMockRequest({
+  method: 'GET',
+  url: '/sse',
+  headers: { host: 'localhost' }
+});
 
 //this tiny config shape is enough for the transport config helper tests.
 type ConfigStub = {
@@ -458,5 +512,99 @@ describe('ai/sse', () => {
     } finally {
       McpSseServer.prototype.dispatch = originalDispatch;
     }
+  });
+
+  describe('key refusals', () => {
+    it('should answer 401 on connect for an invalid key', async () => {
+      const server = makeServer(async () => ({ kind: 'invalid' }));
+      const res = new MockResponse();
+      await server.dispatch(connect(), res);
+
+      expect(res.statusCode).to.equal(401);
+      expect(res.headers.get('www-authenticate')).to.equal('Bearer');
+      expect(server.created).to.equal(0);
+    });
+
+    it('should answer 401 on a message post for an invalid key', async () => {
+      const server = makeServer(async () => ({ kind: 'invalid' }));
+      const res = new MockResponse();
+      await server.dispatch(post(callTool('public_ping')), res);
+
+      expect(res.statusCode).to.equal(401);
+      expect(res.headers.get('www-authenticate')).to.equal('Bearer');
+    });
+
+    it('should answer 403 for a tool missing a scope', async () => {
+      const server = makeServer(async () => reader());
+      await server.dispatch(connect(), new MockResponse());
+
+      const res = new MockResponse();
+      await server.dispatch(post(callTool('article_publish')), res);
+
+      expect(res.statusCode).to.equal(403);
+      const payload = expectJson<{
+        id: number,
+        error: { message: string }
+      }>(res.body);
+      expect(payload.id).to.equal(9);
+      expect(payload.error.message)
+        .to.equal('Forbidden MCP tool call: article_publish');
+    });
+
+    it('should pass allowed and unregistered tool calls', async () => {
+      const server = makeServer(async () => reader());
+      await server.dispatch(connect(), new MockResponse());
+
+      for (const name of [ 'public_ping', 'missing_tool' ]) {
+        const res = new MockResponse();
+        await server.dispatch(post(callTool(name)), res);
+        expect(res.statusCode).to.equal(200);
+      }
+    });
+
+    it('should skip the scope check when no registry loader is given', async () => {
+      const server = makeServer(async () => reader(), null);
+      await server.dispatch(connect(), new MockResponse());
+
+      const res = new MockResponse();
+      await server.dispatch(post(callTool('article_publish')), res);
+
+      expect(res.statusCode).to.equal(200);
+    });
+
+    it('should close the session when its key dies', async () => {
+      let current: AuthContext = reader();
+      const server = makeServer(async () => current);
+      await server.dispatch(connect(), new MockResponse());
+
+      const live = new MockResponse();
+      await server.dispatch(post(callTool('public_ping')), live);
+      expect(live.statusCode).to.equal(200);
+
+      current = { kind: 'invalid' };
+      const dead = new MockResponse();
+      await server.dispatch(post(callTool('public_ping')), dead);
+      expect(dead.statusCode).to.equal(401);
+      expect(server.oncloseCalls).to.equal(1);
+
+      //the session is gone, so a later post finds nothing to route to
+      current = reader();
+      const gone = new MockResponse();
+      await server.dispatch(post(callTool('public_ping')), gone);
+      expect(gone.statusCode).to.equal(404);
+    });
+
+    it('should refuse a post that presents a different key', async () => {
+      let current: AuthContext = reader();
+      const server = makeServer(async () => current);
+      await server.dispatch(connect(), new MockResponse());
+
+      current = { kind: 'public' };
+      const res = new MockResponse();
+      await server.dispatch(post(callTool('public_ping')), res);
+
+      expect(res.statusCode).to.equal(401);
+      expect(server.oncloseCalls).to.equal(0);
+    });
   });
 });

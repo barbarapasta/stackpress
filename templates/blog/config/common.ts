@@ -63,6 +63,40 @@ export const admin = {
   ]
 };
 
+//Config for the built-in agent of `stackpress-ai`. Each provider key is the
+//name of an environment variable, never the key itself. With none of them
+//set the blog answers with a scripted offline model, so the chat routes
+//work without an account. See `plugins/app/agent.ts`.
+export const agent = {
+  //where the chat routes are mounted
+  base: '/agent',
+  providers: {
+    anthropic: { key: 'ANTHROPIC_API_KEY' },
+    openrouter: { key: 'OPENROUTER_API_KEY' }
+  },
+  //the model used until a person picks another
+  model: 'claude-opus-5-5',
+  //the models offered in the picker
+  models: [
+    {
+      provider: 'anthropic' as 'anthropic',
+      model: 'claude-opus-5-5',
+      title: 'Claude Opus 5.5'
+    },
+    {
+      provider: 'openrouter' as 'openrouter',
+      model: 'openai/gpt-6.1-sol',
+      title: 'GPT-6.1 Sol'
+    }
+  ],
+  instructions: 'You help the signed-in person manage the blog. Articles '
+    + 'can be published and unpublished. Comments can be deleted.',
+  //input plus output tokens one person may use per day
+  limit: 200000,
+  //a pending approval stays valid for 30 minutes
+  approvalTtl: 1000 * 60 * 30
+};
+
 export const api = {
   //when sessions expire. this is used with `session.created` column
   expires: 1000 * 60 * 60 * 24 * 365,
@@ -554,7 +588,9 @@ export const session = {
       { method: 'ALL', route: '/articles/**' },
       { method: 'ALL', route: '/auth/**' },
       { method: 'ALL', route: '/admin/**' },
-      { method: 'ALL', route: '/api/**' }
+      { method: 'ALL', route: '/api/**' },
+      //the agent chat routes
+      { method: 'ALL', route: '/agent/**' }
     ],
     MANAGER: [
       //page routes
@@ -562,14 +598,18 @@ export const session = {
       { method: 'ALL', route: '/articles/**' },
       { method: 'ALL', route: '/auth/**' },
       { method: 'ALL', route: '/admin/auth/**' },
-      { method: 'ALL', route: '/api/**' }
+      { method: 'ALL', route: '/api/**' },
+      //the agent chat routes
+      { method: 'ALL', route: '/agent/**' }
     ],
     USER: [
       //page routes
       { method: 'ALL', route: '/' },
       { method: 'ALL', route: '/articles/**' },
       { method: 'ALL', route: '/auth/**' },
-      { method: 'ALL', route: '/api/**' }
+      { method: 'ALL', route: '/api/**' },
+      //the agent chat routes
+      { method: 'ALL', route: '/agent/**' }
     ],
     GUEST: [
       //page routes

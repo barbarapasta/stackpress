@@ -2,7 +2,8 @@
   "extends": "@stackpress/lib/tsconfig/esm",
   "compilerOptions": {
     "moduleResolution": "node",
-    "outDir": "esm/"
+    "outDir": "esm/",
+    "jsx": "react-jsx"
   },
   "include": [
     "src/**/*.ts",

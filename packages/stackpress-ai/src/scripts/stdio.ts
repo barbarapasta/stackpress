@@ -9,7 +9,9 @@ import { createMcpServer } from '../plugin.js';
  * Start the stdio transport from Stackpress config.
  */
 export default async function stdio(ctx: Server) {
-  //create one MCP server from the current Stackpress runtime
+  //create one MCP server from the current Stackpress runtime. This is left
+  // unfiltered on purpose: stdio is trusted local use by the operator who
+  // started the process, so no key is presented or checked here.
   const server = await createMcpServer(ctx as ToolResolverServer);
 
   //if there are no tools, then the transport should fail loudly and early

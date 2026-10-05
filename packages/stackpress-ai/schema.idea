@@ -1,0 +1,439 @@
+use "stackpress-session/schema.idea"
+
+//Records kept by the built-in agent. Turns are append-only: nothing in
+//the package's store edits or deletes one. Actions are the log of what
+//the agent did for a person, and usage feeds the daily limit.
+
+enum AgentActionStatus {
+  PENDING "pending"
+  APPROVED "approved"
+  DECLINED "declined"
+  DONE "done"
+  FAILED "failed"
+  UNDONE "undone"
+  EXPIRED "expired"
+}
+
+model Profile {
+  agentThreads  AgentThread[] @label("Agent Threads")
+  agentActions  AgentAction[] @label("Agent Actions")
+  agentUsage    AgentUsage[]  @label("Agent Usage")
+}
+
+model AgentThread
+  @labels("Agent Thread" "Agent Threads")
+  @display("{{title}}")
+  @icon("comments")
+  @query("*" "profile.*")
+{
+  id        String
+            @label("ID")
+            @id @default("cuid()")
+            @list.clip({ length 10 hellip true }) @view.string
+            @description("Unique generated identifier.")
+            @examples("g3iuej3tg8bcf7e2lidz7pjf")
+
+  profileId String
+            @label("Owner")
+            @field.relation({
+              id "id"
+              search "/admin/profile/search?json&q={{query}}"
+              template "{{name}}"
+            })
+            @is.required("Owner is required")
+            @filter.relation({
+              id "id"
+              search "/admin/profile/search?json&q={{query}}"
+              template "{{name}}"
+            })
+            @list.template({ template "{{profile.name}}" })
+            @view.template({ template "{{profile.name}}" })
+            @description("The person who owns this thread. Threads are private to their owner.")
+            @examples("pjfdz7tg8bcf7e2lig3iuej3")
+
+  title     String
+            @label("Title")
+            @searchable
+            @field.input({ type "text" })
+            @is.required("Title is required")
+            @list.string @view.string
+            @description("Short title of the thread.")
+            @examples("Close out last week's approvals")
+
+  model     String?
+            @label("Model")
+            @list.string @view.string
+            @description("Model the person chose for the next reply.")
+            @examples("claude-sonnet-5-5")
+
+  active    Boolean
+            @label("Active")
+            @default(true) @active
+            @filter.switch
+            @view.yesno
+            @description("Special flag to indicate active rows. Inactive rows are not shown in the list view, but can be viewed in the detail view.")
+            @examples(true)
+
+  created   Datetime
+            @label("Created")
+            @default("now()") @sortable
+            @list.date("m d, Y h:iA")
+            @view.date("m d, Y h:iA")
+            @description("Generated timestamp when row was created.")
+            @examples("2025-10-01T12:00:00Z")
+
+  updated   Datetime
+            @label("Updated")
+            @default("now()") @timestamp @sortable
+            @list.date("m d, Y h:iA")
+            @view.date("m d, Y h:iA")
+            @description("Generated timestamp that is updated whenever the row has changed.")
+            @examples("2025-10-01T12:00:00Z")
+
+  profile   Profile
+            @relation({ local "profileId" foreign "id" })
+
+  turns     AgentTurn[]   @label("Turns")
+  actions   AgentAction[] @label("Actions")
+}
+
+model AgentTurn
+  @labels("Agent Turn" "Agent Turns")
+  @display("{{role}}")
+  @icon("message")
+  @query("*" "agentThread.*")
+{
+  id          String
+              @label("ID")
+              @id @default("cuid()")
+              @list.clip({ length 10 hellip true }) @view.string
+              @description("Unique generated identifier.")
+              @examples("bcf7e2lig3iuej3tg8dz7pjf")
+
+  threadId    String
+              @label("Thread")
+              @field.relation({
+                id "id"
+                search "/admin/agent-thread/search?json&q={{query}}"
+                template "{{title}}"
+              })
+              @is.required("Thread is required")
+              @filter.relation({
+                id "id"
+                search "/admin/agent-thread/search?json&q={{query}}"
+                template "{{title}}"
+              })
+              @list.template({ template "{{agentThread.title}}" })
+              @view.template({ template "{{agentThread.title}}" })
+              @description("The thread this turn belongs to.")
+              @examples("g3iuej3tg8bcf7e2lidz7pjf")
+
+  role        String
+              @label("Role")
+              @field.input({ type "text" })
+              @is.required("Role is required")
+              @filter.input({ type "text" })
+              @list.lowercase @view.lowercase
+              @description("Who produced the turn: user, assistant, or tool.")
+              @examples("assistant")
+
+  text        Text?
+              @label("Text")
+              @field.textarea
+              @view.text
+              @description("Plain text of the turn.")
+              @examples("I found three approvals waiting.")
+
+  toolCalls   Json?
+              @label("Tool Calls")
+              @view.json
+              @description("Tool calls the model asked for, in neutral form.")
+
+  toolResults Json?
+              @label("Tool Results")
+              @view.json
+              @description("Results returned to the model for those tool calls.")
+
+  files       String[]
+              @label("Files")
+              @default([])
+              @view.taglist({ pill true className "frui-mr-md" })
+              @description("File references only. The framework never stores file contents.")
+              @examples([ "upload:7e2lig3iuej3" ])
+
+  provider    String?
+              @label("Provider")
+              @list.string @view.string
+              @description("Provider that produced an assistant turn.")
+              @examples("openrouter")
+
+  model       String?
+              @label("Model")
+              @list.string @view.string
+              @description("Model that produced an assistant turn.")
+              @examples("claude-sonnet-5-5")
+
+  raw         Text?
+              @label("Raw Reply")
+              @view.text
+              @description("The provider's reply exactly as given. Replayed unchanged to the model that produced it.")
+
+  inputTokens  Integer
+              @label("Input Tokens")
+              @default(0)
+              @list.number @view.number
+              @description("Input tokens the provider reported for this turn.")
+              @examples(1200)
+
+  outputTokens Integer
+              @label("Output Tokens")
+              @default(0)
+              @list.number @view.number
+              @description("Output tokens the provider reported for this turn.")
+              @examples(300)
+
+  created     Datetime
+              @label("Created")
+              @default("now()") @sortable
+              @list.date("m d, Y h:iA")
+              @view.date("m d, Y h:iA")
+              @description("Generated timestamp when row was created.")
+              @examples("2025-10-01T12:00:00Z")
+
+  agentThread AgentThread
+              @relation({ local "threadId" foreign "id" })
+}
+
+model AgentAction
+  @labels("Agent Action" "Agent Actions")
+  @display("{{tool}}")
+  @icon("bolt")
+  @query("*" "profile.*" "agentThread.*")
+{
+  id          String
+              @label("ID")
+              @id @default("cuid()")
+              @list.clip({ length 10 hellip true }) @view.string
+              @description("Unique generated identifier.")
+              @examples("e2lig3iuej3tg8bcf7dz7pjf")
+
+  threadId    String
+              @label("Thread")
+              @field.relation({
+                id "id"
+                search "/admin/agent-thread/search?json&q={{query}}"
+                template "{{title}}"
+              })
+              @is.required("Thread is required")
+              @filter.relation({
+                id "id"
+                search "/admin/agent-thread/search?json&q={{query}}"
+                template "{{title}}"
+              })
+              @list.template({ template "{{agentThread.title}}" })
+              @view.template({ template "{{agentThread.title}}" })
+              @description("The thread the action happened in.")
+              @examples("g3iuej3tg8bcf7e2lidz7pjf")
+
+  turnId      String
+              @label("Turn")
+              @is.required("Turn is required")
+              @view.string
+              @description("The assistant turn that asked for the action.")
+              @examples("bcf7e2lig3iuej3tg8dz7pjf")
+
+  profileId   String
+              @label("Who")
+              @field.relation({
+                id "id"
+                search "/admin/profile/search?json&q={{query}}"
+                template "{{name}}"
+              })
+              @is.required("Profile is required")
+              @filter.relation({
+                id "id"
+                search "/admin/profile/search?json&q={{query}}"
+                template "{{name}}"
+              })
+              @list.template({ template "{{profile.name}}" })
+              @view.template({ template "{{profile.name}}" })
+              @description("The person the agent acted as.")
+              @examples("pjfdz7tg8bcf7e2lig3iuej3")
+
+  tool        String
+              @label("Tool")
+              @searchable
+              @field.input({ type "text" })
+              @is.required("Tool is required")
+              @filter.input({ type "text" })
+              @list.string @view.string
+              @description("Name of the tool the agent used.")
+              @examples("approve_request")
+
+  event       String
+              @label("Event")
+              @field.input({ type "text" })
+              @is.required("Event is required")
+              @list.string @view.string
+              @description("Event the tool resolved to.")
+              @examples("approval-approve")
+
+  input       Json?
+              @label("Input")
+              @view.json
+              @description("Arguments the action was asked to run with.")
+
+  status      AgentActionStatus
+              @label("Status")
+              @default("pending")
+              @field.select({ options [ "pending" "approved" "declined" "done" "failed" "undone" "expired" ] })
+              @is.required("Status is required")
+              @filter.select({ options [ "pending" "approved" "declined" "done" "failed" "undone" "expired" ] })
+              @list.string @view.string
+              @description("Where the action stands. Only a pending action can be approved, declined, or expired.")
+              @examples("done")
+
+  result      Json?
+              @label("Result")
+              @view.json
+              @description("What the event returned.")
+
+  error       Text?
+              @label("Error")
+              @view.text
+              @description("Why the action failed or was refused.")
+
+  operation   String?
+              @label("Operation")
+              @list.string @view.string
+              @description("The app's own identifier for what changed, kept so a command can be matched to its record.")
+              @examples("approval-4412")
+
+  reverses    String?
+              @label("Reverses")
+              @list.clip({ length 10 hellip true }) @view.string
+              @description("Id of the action this one undoes.")
+              @examples("e2lig3iuej3tg8bcf7dz7pjf")
+
+  irreversible Boolean
+              @label("Irreversible")
+              @default(false)
+              @filter.switch
+              @view.yesno
+              @description("True when the action has no inverse and so needed approval.")
+              @examples(false)
+
+  claim       String?
+              @description("Internal. Set by the store when an approval claims the action.")
+
+  expires     Datetime?
+              @label("Expires")
+              @sortable
+              @list.date("m d, Y h:iA")
+              @view.date("m d, Y h:iA")
+              @description("When a pending approval stops being valid.")
+              @examples("2025-10-01T12:30:00Z")
+
+  created     Datetime
+              @label("Created")
+              @default("now()") @sortable
+              @list.date("m d, Y h:iA")
+              @view.date("m d, Y h:iA")
+              @description("Generated timestamp when row was created.")
+              @examples("2025-10-01T12:00:00Z")
+
+  updated     Datetime
+              @label("Updated")
+              @default("now()") @timestamp @sortable
+              @list.date("m d, Y h:iA")
+              @view.date("m d, Y h:iA")
+              @description("Generated timestamp that is updated whenever the row has changed.")
+              @examples("2025-10-01T12:00:00Z")
+
+  agentThread AgentThread
+              @relation({ local "threadId" foreign "id" })
+
+  profile     Profile
+              @relation({ local "profileId" foreign "id" })
+}
+
+model AgentUsage
+  @labels("Agent Usage" "Agent Usage")
+  @display("{{day}}")
+  @icon("gauge")
+  @query("*" "profile.*")
+{
+  id            String
+                @label("ID")
+                @id
+                @list.string @view.string
+                @description("Profile id and day joined, so a person has one row per day.")
+                @examples("pjfdz7tg8bcf7e2lig3iuej3:2025-10-01")
+
+  profileId     String
+                @label("Profile")
+                @field.relation({
+                  id "id"
+                  search "/admin/profile/search?json&q={{query}}"
+                  template "{{name}}"
+                })
+                @is.required("Profile is required")
+                @filter.relation({
+                  id "id"
+                  search "/admin/profile/search?json&q={{query}}"
+                  template "{{name}}"
+                })
+                @list.template({ template "{{profile.name}}" })
+                @view.template({ template "{{profile.name}}" })
+                @description("The person the usage is counted for.")
+                @examples("pjfdz7tg8bcf7e2lig3iuej3")
+
+  day           String
+                @label("Day")
+                @sortable
+                @is.required("Day is required")
+                @filter.input({ type "text" })
+                @list.string @view.string
+                @description("The day, as YYYY-MM-DD in UTC.")
+                @examples("2025-10-01")
+
+  inputTokens   Integer
+                @label("Input Tokens")
+                @default(0)
+                @list.number @view.number
+                @description("Input tokens reported by providers that day.")
+                @examples(12000)
+
+  outputTokens  Integer
+                @label("Output Tokens")
+                @default(0)
+                @list.number @view.number
+                @description("Output tokens reported by providers that day.")
+                @examples(3000)
+
+  turns         Integer
+                @label("Turns")
+                @default(0)
+                @list.number @view.number
+                @description("Assistant turns counted that day.")
+                @examples(14)
+
+  created       Datetime
+                @label("Created")
+                @default("now()") @sortable
+                @list.date("m d, Y h:iA")
+                @view.date("m d, Y h:iA")
+                @description("Generated timestamp when row was created.")
+                @examples("2025-10-01T12:00:00Z")
+
+  updated       Datetime
+                @label("Updated")
+                @default("now()") @timestamp @sortable
+                @list.date("m d, Y h:iA")
+                @view.date("m d, Y h:iA")
+                @description("Generated timestamp that is updated whenever the row has changed.")
+                @examples("2025-10-01T12:00:00Z")
+
+  profile       Profile
+                @relation({ local "profileId" foreign "id" })
+}

@@ -2,16 +2,37 @@ import { describe, it } from 'mocha';
 import { expect } from 'chai';
 import {
   buildTools,
+  callerFromAuth,
+  findForbiddenCall,
+  isLive,
   listToolsForAuth,
   normalizeTool,
   parseAuthorization,
+  readJsonBody,
   requiresSecret,
   resolveListAuth,
+  sameCaller,
+  toolAllowed,
   validateInput,
   withToolData
 } from '../src/helpers.js';
-import type { ToolResolverServer } from '../src/types.js';
-import { createCtxStub } from './helpers.js';
+import { loadRegistry } from '../src/scripts/tools.js';
+import type { AuthContext, ToolResolverServer } from '../src/types.js';
+import {
+  createApplication,
+  createCtxStub,
+  createMockRequest,
+  createSession
+} from './helpers.js';
+
+//this helper builds one app caller that holds the given scopes
+function appAuth(scopes: string[], secret = 'secret'): AuthContext {
+  return {
+    kind: 'app',
+    token: { token: `app_1:${secret}`, id: 'app_1', secret },
+    application: createApplication({ scopes })
+  };
+}
 
 describe('ai/registry', () => {
   it('should resolve plugin-mode tools and let config override metadata', async () => {
@@ -72,34 +93,113 @@ describe('ai/registry', () => {
 
   it('should prefer application auth over session auth in tools/list', async () => {
     const ctx = createCtxStub({
-      application: {
-        id: 'app_1',
-        name: 'App',
-        secret: 'secret',
-        scopes: [ 'articles.read' ],
-        active: true,
-        expires: new Date(),
-        created: new Date(),
-        updated: new Date()
-      },
-      session: {
-        id: 'app_1',
-        applicationId: 'app_1',
-        profileId: 'profile_1',
-        secret: 'secret',
-        scopes: [ 'comments.read' ],
-        active: true,
-        expires: new Date(),
-        created: new Date(),
-        updated: new Date()
-      }
+      application: createApplication(),
+      session: createSession({ id: 'app_1' })
     });
     const auth = await resolveListAuth(
       ctx as unknown as ToolResolverServer,
-      'Bearer app_1'
+      'Bearer app_1:secret'
     );
 
     expect(auth.kind).to.equal('app');
+  });
+
+  it('should keep a request with no key public', async () => {
+    const ctx = createCtxStub();
+    const server = ctx as unknown as ToolResolverServer;
+
+    expect((await resolveListAuth(server)).kind).to.equal('public');
+    expect((await resolveListAuth(server, 'Basic abc')).kind).to.equal('public');
+  });
+
+  it('should resolve a live user session key', async () => {
+    const ctx = createCtxStub({ session: createSession() });
+    const auth = await resolveListAuth(
+      ctx as unknown as ToolResolverServer,
+      'Bearer session_1:secret'
+    );
+
+    expect(auth.kind).to.equal('user');
+  });
+
+  it('should resolve an unknown key to invalid instead of public', async () => {
+    const ctx = createCtxStub();
+    const auth = await resolveListAuth(
+      ctx as unknown as ToolResolverServer,
+      'Bearer nobody:secret'
+    );
+
+    expect(auth.kind).to.equal('invalid');
+  });
+
+  it('should resolve an inactive key to invalid', async () => {
+    const server = (options: object) => createCtxStub(
+      options
+    ) as unknown as ToolResolverServer;
+
+    expect((await resolveListAuth(
+      server({ application: createApplication({ active: false }) }),
+      'Bearer app_1:secret'
+    )).kind).to.equal('invalid');
+    expect((await resolveListAuth(
+      server({ session: createSession({ active: false }) }),
+      'Bearer session_1:secret'
+    )).kind).to.equal('invalid');
+  });
+
+  it('should resolve an expired key to invalid', async () => {
+    const past = new Date(Date.now() - 1000);
+    const server = (options: object) => createCtxStub(
+      options
+    ) as unknown as ToolResolverServer;
+
+    expect((await resolveListAuth(
+      server({ application: createApplication({ expires: past }) }),
+      'Bearer app_1:secret'
+    )).kind).to.equal('invalid');
+    expect((await resolveListAuth(
+      server({ session: createSession({ expires: past.toISOString() }) }),
+      'Bearer session_1:secret'
+    )).kind).to.equal('invalid');
+  });
+
+  it('should resolve a missing or wrong secret to invalid', async () => {
+    const ctx = createCtxStub({
+      application: createApplication(),
+      session: createSession()
+    });
+    const server = ctx as unknown as ToolResolverServer;
+
+    expect((await resolveListAuth(server, 'Bearer app_1')).kind)
+      .to.equal('invalid');
+    expect((await resolveListAuth(server, 'Bearer app_1:wrong')).kind)
+      .to.equal('invalid');
+    expect((await resolveListAuth(
+      createCtxStub({ session: createSession() }) as unknown as ToolResolverServer,
+      'Bearer session_1:wrong'
+    )).kind).to.equal('invalid');
+  });
+
+  it('should not fall back to a session when the application key is dead', async () => {
+    const ctx = createCtxStub({
+      application: createApplication({ active: false }),
+      session: createSession({ id: 'app_1' })
+    });
+    const auth = await resolveListAuth(
+      ctx as unknown as ToolResolverServer,
+      'Bearer app_1:secret'
+    );
+
+    expect(auth.kind).to.equal('invalid');
+  });
+
+  it('should treat only an explicit false or a past expiry as dead', () => {
+    expect(isLive({})).to.equal(true);
+    expect(isLive({ active: null, expires: null })).to.equal(true);
+    expect(isLive({ active: false })).to.equal(false);
+    expect(isLive({ expires: Date.now() + 60_000 })).to.equal(true);
+    expect(isLive({ expires: Date.now() - 60_000 })).to.equal(false);
+    expect(isLive({ expires: 'not a date' })).to.equal(false);
   });
 
   it('should filter app tools by scope and keep public tools', () => {
@@ -129,20 +229,7 @@ describe('ai/registry', () => {
       })!
     ];
 
-    const filtered = listToolsForAuth(tools, {
-      kind: 'app',
-      token: { token: 'app_1', id: 'app_1', secret: '' },
-      application: {
-        id: 'app_1',
-        name: 'App',
-        secret: 'secret',
-        scopes: [ 'articles.read' ],
-        active: true,
-        expires: new Date(),
-        created: new Date(),
-        updated: new Date()
-      }
-    });
+    const filtered = listToolsForAuth(tools, appAuth([ 'articles.read' ]));
 
     expect(filtered.map(tool => tool.name)).to.deep.equal([
       'public_ping',
@@ -173,21 +260,11 @@ describe('ai/registry', () => {
         method: 'POST'
       })!,
       { body: 'hi' },
-      {
+      callerFromAuth({
         kind: 'user',
         token: { token: 'session_1:secret', id: 'session_1', secret: 'secret' },
-        session: {
-          id: 'session_1',
-          applicationId: 'app_1',
-          profileId: 'profile_1',
-          secret: 'secret',
-          scopes: [ 'comments.write' ],
-          active: true,
-          expires: new Date(),
-          created: new Date(),
-          updated: new Date()
-        }
-      }
+        session: createSession({ scopes: [ 'comments.write' ] })
+      })!
     );
 
     expect(data).to.include({
@@ -198,10 +275,148 @@ describe('ai/registry', () => {
     });
   });
 
-  it('should classify non-get methods as secret-required', () => {
-    expect(requiresSecret('GET')).to.equal(false);
+  it('should classify every method as secret-required', () => {
+    expect(requiresSecret('GET')).to.equal(true);
     expect(requiresSecret('POST')).to.equal(true);
     expect(requiresSecret('delete')).to.equal(true);
+  });
+
+  it('should require every listed scope, not any', () => {
+    const tool = normalizeTool({
+      name: 'article_publish',
+      event: 'article-publish',
+      type: 'app',
+      method: 'POST',
+      scopes: [ 'articles.read', 'articles.write' ]
+    })!;
+
+    expect(toolAllowed(tool, appAuth([ 'articles.read' ]))).to.equal(false);
+    expect(toolAllowed(tool, appAuth([ 'articles.write' ]))).to.equal(false);
+    expect(toolAllowed(tool, appAuth([ 'articles.read', 'articles.write' ])))
+      .to.equal(true);
+  });
+
+  it('should require the secret on read tools too', () => {
+    const tool = normalizeTool({
+      name: 'article_search',
+      event: 'article-search',
+      type: 'app',
+      method: 'GET',
+      scopes: [ 'articles.read' ]
+    })!;
+
+    expect(toolAllowed(tool, appAuth([ 'articles.read' ], ''))).to.equal(false);
+    expect(toolAllowed(tool, appAuth([ 'articles.read' ], 'wrong')))
+      .to.equal(false);
+    expect(toolAllowed(tool, appAuth([ 'articles.read' ]))).to.equal(true);
+  });
+
+  it('should gate user tools on session scopes and secret', () => {
+    const tool = normalizeTool({
+      name: 'comment_search',
+      event: 'comment-search',
+      type: 'user',
+      method: 'GET',
+      scopes: [ 'comments.read' ]
+    })!;
+    const user = (secret: string): AuthContext => ({
+      kind: 'user',
+      token: { token: `session_1:${secret}`, id: 'session_1', secret },
+      session: createSession()
+    });
+
+    expect(toolAllowed(tool, user('secret'))).to.equal(true);
+    expect(toolAllowed(tool, user(''))).to.equal(false);
+    expect(toolAllowed(tool, appAuth([ 'comments.read' ]))).to.equal(false);
+  });
+
+  it('should never allow an invalid caller, even for public tools', () => {
+    const tool = normalizeTool({
+      name: 'public_ping',
+      event: 'public-ping',
+      type: 'public',
+      method: 'GET'
+    })!;
+
+    expect(toolAllowed(tool, { kind: 'public' })).to.equal(true);
+    expect(toolAllowed(tool, { kind: 'invalid' })).to.equal(false);
+    expect(listToolsForAuth([ tool ], { kind: 'invalid' })).to.deep.equal([]);
+  });
+
+  it('should compare callers by the key they presented', () => {
+    const one = appAuth([ 'articles.read' ]);
+
+    expect(sameCaller({ kind: 'public' }, { kind: 'public' })).to.equal(true);
+    expect(sameCaller({ kind: 'public' }, one)).to.equal(false);
+    expect(sameCaller(one, { kind: 'public' })).to.equal(false);
+    expect(sameCaller(one, appAuth([]))).to.equal(true);
+    expect(sameCaller(one, appAuth([], 'other'))).to.equal(false);
+    expect(sameCaller(one, { kind: 'invalid' })).to.equal(false);
+    expect(sameCaller({ kind: 'invalid' }, one)).to.equal(false);
+  });
+
+  it('should find a call to a registered tool the caller lacks', async () => {
+    let loads = 0;
+    const tools = [
+      normalizeTool({
+        name: 'article_publish',
+        event: 'article-publish',
+        type: 'app',
+        method: 'POST',
+        scopes: [ 'articles.write' ]
+      })!,
+      normalizeTool({
+        name: 'public_ping',
+        event: 'public-ping',
+        type: 'public',
+        method: 'GET'
+      })!
+    ];
+    const registry = async () => {
+      loads++;
+      return tools;
+    };
+    const call = (name: unknown, id = 7) => ({
+      jsonrpc: '2.0',
+      id,
+      method: 'tools/call',
+      params: { name }
+    });
+    const auth = appAuth([ 'articles.read' ]);
+
+    expect(await findForbiddenCall(registry, auth, call('article_publish')))
+      .to.deep.equal({ id: 7, name: 'article_publish' });
+    expect(await findForbiddenCall(registry, auth, [
+      call('public_ping', 1),
+      call('article_publish', 2)
+    ])).to.deep.equal({ id: 2, name: 'article_publish' });
+    expect(await findForbiddenCall(registry, auth, {
+      ...call('article_publish'),
+      id: undefined
+    })).to.deep.equal({ id: null, name: 'article_publish' });
+
+    //allowed, unregistered, and non-call bodies are all left alone
+    expect(await findForbiddenCall(registry, appAuth([ 'articles.write' ]),
+      call('article_publish'))).to.equal(null);
+    expect(await findForbiddenCall(registry, auth, call('missing_tool')))
+      .to.equal(null);
+    expect(loads).to.equal(5);
+    expect(await findForbiddenCall(registry, auth, { method: 'tools/list' }))
+      .to.equal(null);
+    expect(await findForbiddenCall(registry, auth, call(42))).to.equal(null);
+    expect(await findForbiddenCall(registry, auth, null)).to.equal(null);
+    expect(loads).to.equal(5);
+  });
+
+  it('should load the full configured registry', async () => {
+    const ctx = createCtxStub({
+      config: {
+        'mcp.tools': [{ name: 'public_ping', event: 'public-ping' }]
+      }
+    });
+    const tools = await loadRegistry(ctx as unknown as ToolResolverServer)();
+
+    expect(tools.map(tool => tool.name)).to.deep.equal([ 'public_ping' ]);
   });
 
   it('should validate input against a JSON schema when provided', () => {
@@ -222,5 +437,62 @@ describe('ai/registry', () => {
     expect(validateInput(tool, { query: 'elden ring' })).to.deep.equal({
       query: 'elden ring'
     });
+  });
+
+  it('should infer the name and title of a tool that gives neither', async () => {
+    const ctx = createCtxStub();
+    const tools = await buildTools(ctx as unknown as ToolResolverServer, [
+      { event: 'article-search' }
+    ]);
+
+    expect(tools).to.have.length(1);
+    expect(tools[0].name).to.equal('article_search');
+    expect(tools[0].title).to.equal('Article Search');
+    expect(tools[0].method).to.equal('GET');
+    expect(tools[0].type).to.equal('public');
+  });
+
+  it('should drop configs that cannot become tools', () => {
+    //no event to call
+    expect(normalizeTool({ event: '', name: 'a' })).to.equal(null);
+    //a method the package does not support
+    expect(normalizeTool({ event: 'a', name: 'a', method: 'TRACE' }))
+      .to.equal(null);
+    //no name, and no way to infer one
+    expect(normalizeTool({ event: 'a' })).to.equal(null);
+    expect(normalizeTool({ event: 'a', name: '   ' })).to.equal(null);
+  });
+
+  it('should reject bearer headers that carry no usable id', () => {
+    expect(parseAuthorization('Bearer')).to.equal(null);
+    expect(parseAuthorization('Bearer :secret')).to.equal(null);
+    expect(parseAuthorization('Basic abc')).to.equal(null);
+    expect(parseAuthorization(null)).to.equal(null);
+  });
+
+  it('should hide a tool of an unknown type from every caller', () => {
+    const tool = {
+      ...normalizeTool({ name: 'odd', event: 'odd', method: 'GET' })!,
+      type: 'unknown'
+    } as unknown as ReturnType<typeof normalizeTool> & object;
+
+    expect(toolAllowed(tool, appAuth([ 'articles.read' ]))).to.equal(false);
+  });
+
+  it('should read a JSON body and treat an empty one as null', async () => {
+    const json = await readJsonBody(createMockRequest({
+      body: '{"a":1}'
+    }) as never);
+    const empty = await readJsonBody(createMockRequest() as never);
+    const strings = await readJsonBody({
+      async *[Symbol.asyncIterator]() {
+        yield '{"b":';
+        yield '2}';
+      }
+    } as never);
+
+    expect(json).to.deep.equal({ a: 1 });
+    expect(empty).to.equal(null);
+    expect(strings).to.deep.equal({ b: 2 });
   });
 });

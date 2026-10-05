@@ -91,4 +91,32 @@ describe('ai/transform', () => {
       './Article/tools/index.js'
     );
   });
+
+  it('should leave the client index unchanged when generation repeats', async function() {
+    this.timeout(10000);
+
+    const tmpdir = fs.mkdtempSync(
+      path.join(os.tmpdir(), 'stackpress-ai-transform-')
+    );
+    const project = await createProject(tmpdir);
+    const directory = project.createDirectory(tmpdir);
+    const props = {
+      config: {},
+      cwd: tmpdir,
+      directory,
+      project,
+      schema: loadBlogSchema(),
+      terminal: {} as never,
+      transformer: {} as never
+    };
+
+    await generate(props);
+    const first = directory.getSourceFileOrThrow('index.ts').getFullText();
+    await generate(props);
+    const second = directory.getSourceFileOrThrow('index.ts').getFullText();
+
+    //the tools import and export are added once and not duplicated
+    expect(second).to.equal(first);
+    expect(second.match(/\.\/tools\.js/g)).to.have.length(1);
+  });
 });

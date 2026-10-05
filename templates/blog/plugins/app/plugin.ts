@@ -2,7 +2,10 @@
 import type { HttpServer } from '@stackpress/ingest';
 import type { DesktopMenuContribution } from 'stackpress-desktop/types';
 import { contributeDesktopMenu } from 'stackpress-desktop/plugin';
+import { randomUUID } from 'node:crypto';
+import { caller, contributeTool, undoing } from 'stackpress-ai';
 import type { Config } from '../../config/common.js';
+import { tools, useOffline } from './agent.js';
 
 const desktopMenu: DesktopMenuContribution = {
   id: 'blog:open-latest-posts',
@@ -13,6 +16,17 @@ const desktopMenu: DesktopMenuContribution = {
 };
 
 const desktopMenuContributed = new WeakSet<object>();
+
+//this tool is offered to MCP callers by the plugin itself, so the `mcp.tools`
+// config has no entry for it.
+const siteInfoTool = {
+  name: 'blog_site_info',
+  title: 'Blog Site Info',
+  description: 'Returns the blog name and who the tool call came from.',
+  type: 'public' as 'public',
+  method: 'GET' as 'GET',
+  event: 'app-site-info'
+};
 
 export default function plugin(server: HttpServer<Config>) {
   server.on('listen', async _ => {
@@ -31,11 +45,58 @@ export default function plugin(server: HttpServer<Config>) {
       contributeDesktopMenu(ctx, desktopMenu);
       desktopMenuContributed.add(ctx);
     });
+    server.on('ai-tools', ({ ctx }) => {
+      contributeTool(ctx, siteInfoTool);
+      //the tools the built-in agent may use
+      for (const tool of tools) {
+        contributeTool(ctx, tool);
+      }
+    });
+    server.on('app-site-info', ({ req, res, ctx }) => {
+      res.results({
+        name: ctx.config.path('mcp.name', 'Blog'),
+        caller: caller(req)?.kind || null
+      });
+    });
+    //the sample receipt pair of agent.ts. Issuing makes a number, and its
+    // operation identifier is a new one each time. Like the other sample
+    // events they store nothing and check nothing; an app's own events check
+    // that this person may do this
+    server.on('app-receipt-issue', ({ req, res }) => {
+      const article = req.data<string>('article');
+      res.results({
+        receipt: `R-${randomUUID().slice(0, 8)}`,
+        article,
+        operation: `issue-${randomUUID()}`
+      });
+    });
+    //an undo reads what it is undoing from the record, not from its input,
+    // which is only the original's stored input. The record is undefined on
+    // any other call of this event
+    server.on('app-receipt-void', ({ req, res }) => {
+      const told = undoing(req);
+      if (!told) {
+        res.setError('A receipt is voided only by undoing its issue.', {}, [], 409);
+        return;
+      }
+      const issued = told.original.result as { receipt: string };
+      res.results({
+        voided: issued.receipt,
+        //a stable identifier for this command, derived from the undo action
+        operation: `void-${told.undoActionId}`,
+        told
+      });
+    });
     server.on('blog:desktop-open-latest-posts', ({ res }) => {
       res.results({ desktopEvent: 'blog:desktop-open-latest-posts' });
     });
   });
   server.on('route', async _ => {
+    //with no provider key set, the agent answers with an offline model
+    if (server.config.has('agent')) {
+      useOffline(server);
+    }
+
     server.import.get('/', () => import('./pages/home.js'));
     server.view.get('/', '@/plugins/app/views/home');
 

@@ -3,7 +3,7 @@
   "name": "stackpress-ai",
   "version": "0.10.8",
   "license": "MIT",
-  "description": "MCP server package for the Stackpress framework.",
+  "description": "AI package for the Stackpress framework: an MCP server for outside AI tools and a built-in chat agent with tool approval, undo, and a chat panel.",
   "author": "Chris <chris@stackpress.io>",
   "homepage": "https://www.stackpress.io/",
   "bugs": "https://github.com/stackpress/stackpress/issues",
@@ -15,21 +15,53 @@
   "module": "./esm/index.js",
   "types": "./cjs/index.d.ts",
   "exports": {
-    "./events/*": {
-      "require": "./cjs/events/*.js",
-      "import": "./esm/events/*.js"
+    "./adapters": {
+      "require": "./cjs/adapters/index.js",
+      "import": "./esm/adapters/index.js"
+    },
+    "./client": {
+      "require": "./cjs/client/index.js",
+      "import": "./esm/client/index.js"
     },
     "./events": {
       "require": "./cjs/events/index.js",
       "import": "./esm/events/index.js"
     },
-    "./scripts/*": {
-      "require": "./cjs/scripts/*.js",
-      "import": "./esm/scripts/*.js"
+    "./events/index": {
+      "require": "./cjs/events/index.js",
+      "import": "./esm/events/index.js"
+    },
+    "./events/http": {
+      "require": "./cjs/events/http.js",
+      "import": "./esm/events/http.js"
+    },
+    "./events/sse": {
+      "require": "./cjs/events/sse.js",
+      "import": "./esm/events/sse.js"
+    },
+    "./events/stdio": {
+      "require": "./cjs/events/stdio.js",
+      "import": "./esm/events/stdio.js"
     },
     "./scripts": {
       "require": "./cjs/scripts/index.js",
       "import": "./esm/scripts/index.js"
+    },
+    "./scripts/index": {
+      "require": "./cjs/scripts/index.js",
+      "import": "./esm/scripts/index.js"
+    },
+    "./scripts/http": {
+      "require": "./cjs/scripts/http.js",
+      "import": "./esm/scripts/http.js"
+    },
+    "./scripts/sse": {
+      "require": "./cjs/scripts/sse.js",
+      "import": "./esm/scripts/sse.js"
+    },
+    "./scripts/stdio": {
+      "require": "./cjs/scripts/stdio.js",
+      "import": "./esm/scripts/stdio.js"
     },
     "./helpers": {
       "require": "./cjs/helpers.js",
@@ -50,21 +82,46 @@
     ".": {
       "require": "./cjs/index.js",
       "import": "./esm/index.js"
-    }
+    },
+    "./styles.css": "./styles.css"
   },
   "typesVersions": {
     "*": {
-      "events/*": [
-        "./cjs/events/*.d.ts"
+      "adapters": [
+        "./cjs/adapters/index.d.ts"
+      ],
+      "client": [
+        "./cjs/client/index.d.ts"
       ],
       "events": [
         "./cjs/events/index.d.ts"
       ],
-      "scripts/*": [
-        "./cjs/scripts/*.d.ts"
+      "events/index": [
+        "./cjs/events/index.d.ts"
+      ],
+      "events/http": [
+        "./cjs/events/http.d.ts"
+      ],
+      "events/sse": [
+        "./cjs/events/sse.d.ts"
+      ],
+      "events/stdio": [
+        "./cjs/events/stdio.d.ts"
       ],
       "scripts": [
         "./cjs/scripts/index.d.ts"
+      ],
+      "scripts/index": [
+        "./cjs/scripts/index.d.ts"
+      ],
+      "scripts/http": [
+        "./cjs/scripts/http.d.ts"
+      ],
+      "scripts/sse": [
+        "./cjs/scripts/sse.d.ts"
+      ],
+      "scripts/stdio": [
+        "./cjs/scripts/stdio.d.ts"
       ],
       "helpers": [
         "./cjs/helpers.d.ts"
@@ -87,7 +144,9 @@
     "cjs",
     "esm",
     "LICENSE",
-    "README.md"
+    "README.md",
+    "schema.idea",
+    "styles.css"
   ],
   "scripts": {
     "build": "yarn build:tsc && yarn build:pkg",
@@ -99,24 +158,58 @@
     "build:tsc:esm": "tsc -p ./tsconfig.esm.json",
     "report": "nyc report -r lcov",
     "test": "yarn test:env nyc ts-mocha -r tsx tests/**/*.test.ts",
-    "test:env": "NODE_OPTIONS=\"--disable-warning=ExperimentalWarning --experimental-loader @istanbuljs/esm-loader-hook\""
+    "test:env": "NODE_OPTIONS=\"--disable-warning=ExperimentalWarning --experimental-loader @istanbuljs/esm-loader-hook\"",
+    "smoke": "tsx tests/smoke-openrouter.ts"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "1.29.0",
     "@stackpress/ingest": "0.10.8",
+    "r22n": "1.0.10",
     "stackpress-api": "0.10.8",
     "stackpress-schema": "0.10.8",
+    "stackpress-session": "0.10.8",
     "zod": "4.3.6"
   },
+  "peerDependencies": {
+    "@anthropic-ai/sdk": ">=0.131.0",
+    "openai": ">=7.27.0",
+    "react": "^19",
+    "ts-morph": "^27"
+  },
+  "peerDependenciesMeta": {
+    "@anthropic-ai/sdk": {
+      "optional": true
+    },
+    "openai": {
+      "optional": true
+    },
+    "react": {
+      "optional": true
+    },
+    "ts-morph": {
+      "optional": true
+    }
+  },
   "devDependencies": {
+    "@anthropic-ai/sdk": "0.131.0",
+    "@electric-sql/pglite": "0.3.15",
     "@istanbuljs/esm-loader-hook": "0.3.0",
+    "@stackpress/inquire": "0.10.8",
+    "@stackpress/inquire-pglite": "0.10.8",
     "@types/chai": "4.3.20",
     "@types/mocha": "10.0.10",
     "@types/node": "25.3.5",
+    "@types/react": "19.2.14",
+    "@types/react-dom": "19.2.3",
     "chai": "4.5.0",
     "mocha": "10.8.2",
     "mocha-lcov-reporter": "1.3.0",
     "nyc": "17.1.0",
+    "openai": "7.27.0",
+    "react": "19.2.4",
+    "react-dom": "19.2.4",
+    "stackpress-csrf": "0.10.8",
+    "ts-morph": "27.0.2",
     "ts-node": "10.9.2",
     "tsx": "4.21.0",
     "typescript": "5.9.3"

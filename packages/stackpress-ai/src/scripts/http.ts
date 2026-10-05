@@ -14,14 +14,20 @@ import type {
   McpServer,
   McpSessionMode,
   Promiser,
+  ToolRegistry,
   ToolResolverServer
 } from '../types.js';
 import {
+  findForbiddenCall,
   readJsonBody,
   resolveListAuth,
+  sameCaller,
+  sendForbidden,
   sendJson,
-  sendText
+  sendText,
+  sendUnauthorized
 } from '../helpers.js';
+import { loadRegistry } from './tools.js';
 
 const HTTP_ATTACH_KEY = '__stackpress_ai_http_attached__';
 const HTTP_BODY_UNSET = Symbol('HTTP_BODY_UNSET');
@@ -86,6 +92,9 @@ export class McpHttpServer {
   protected _port: number;
   //this promise bridge keeps the CLI event open until the server exits
   protected _promiser: Promiser<void>;
+  //this loader returns the full registry so forbidden calls can be told apart
+  // from missing tools before the transport runs
+  protected _registry?: ToolRegistry;
   //this Node server accepts the HTTP requests for the MCP endpoint
   protected _service = createServer(this._handleRequest.bind(this));
   //this live session map lets stateful requests route back to the right
@@ -102,7 +111,8 @@ export class McpHttpServer {
     port: number,
     endpoint: string,
     mode: McpSessionMode,
-    promiser: Promiser<void>
+    promiser: Promiser<void>,
+    registry?: ToolRegistry
   ) {
     this._factory = factory;
     this._authResolver = authResolver;
@@ -111,6 +121,7 @@ export class McpHttpServer {
     this._endpoint = endpoint;
     this._mode = mode;
     this._promiser = promiser;
+    this._registry = registry;
     this.shutdown = async () => {
       if (this._exiting) return;
       this._exiting = true;
@@ -176,9 +187,10 @@ export class McpHttpServer {
   protected async _createServer(auth: AuthContext): Promise<McpServer> {
     const server = await this._factory(auth);
 
-    //if config produced no tools, fail loudly so the CLI does not hang
+    //a caller that sees no tools still gets a server with an empty list, so
+    // only a factory that made no server at all is a failure here
     if (!server) {
-      throw new Error('Resolved MCP tool registry is empty.');
+      throw new Error('No MCP server was created for this caller.');
     }
 
     return server;
@@ -279,19 +291,38 @@ export class McpHttpServer {
     //pull the MCP session id header into one stable string key
     const sessionId = req.headers['mcp-session-id'];
     const key = Array.isArray(sessionId) ? sessionId[0] : sessionId;
+    const session = typeof key === 'string' ? this._sessions[key] : undefined;
+
+    //resolve the key again on every request so a key that died mid-session
+    // stops working instead of riding on the session that was opened with it.
+    const auth = await this._authResolver(req);
+    if (auth.kind === 'invalid') {
+      //if the session exists, then end it along with the key
+      if (session) {
+        await session.transport.close();
+      }
+      sendUnauthorized(res);
+      return;
+    }
 
     //if the caller already has a session, let that transport own the request
-    if (typeof key === 'string' && this._sessions[key]) {
-      await this._sessions[key].transport.handleRequest(req, res, body);
+    // as long as the request presents the same key the session was opened by.
+    if (session) {
+      if (!sameCaller(session.auth, auth)) {
+        sendUnauthorized(res);
+        return;
+      }
+      if (await this._refuseCall(res, auth, body)) {
+        return;
+      }
+      await session.transport.handleRequest(req, res, body);
       return;
     }
 
     //without a session id, only initialize requests may create a new session
     if (!key && req.method === 'POST' && isInitializeRequest(body)) {
-      const session = await this._createSession(
-        await this._authResolver(req)
-      );
-      await session.transport.handleRequest(req, res, body);
+      const created = await this._createSession(auth);
+      await created.transport.handleRequest(req, res, body);
       return;
     }
 
@@ -304,6 +335,27 @@ export class McpHttpServer {
       },
       id: null
     });
+  }
+
+  /**
+   * Answer 403 when the body calls a registered tool the caller lacks.
+   */
+  protected async _refuseCall(
+    res: ServerResponse,
+    auth: AuthContext,
+    body: unknown
+  ) {
+    if (!this._registry) {
+      return false;
+    }
+
+    const forbidden = await findForbiddenCall(this._registry, auth, body);
+    if (!forbidden) {
+      return false;
+    }
+
+    sendForbidden(res, forbidden.id, forbidden.name);
+    return true;
   }
 
   /**
@@ -327,8 +379,21 @@ export class McpHttpServer {
       return;
     }
 
+    //refuse a key that failed verification before any session is built
+    const auth = await this._authResolver(req);
+    if (auth.kind === 'invalid') {
+      sendUnauthorized(res);
+      return;
+    }
+
+    //refuse a call to a tool the caller lacks, since the per-caller registry
+    // below would leave that tool out and the SDK would answer 200 not found.
+    if (await this._refuseCall(res, auth, body)) {
+      return;
+    }
+
     //create one throwaway session and close it once the response finishes
-    const session = await this._createSession(await this._authResolver(req));
+    const session = await this._createSession(auth);
     res.on('close', async () => {
       await session.transport.close();
     });
@@ -356,6 +421,7 @@ export default async function http(ctx: Server) {
     ctx as ToolResolverServer,
     header(req, 'authorization') || undefined
   );
+  const registry = loadRegistry(ctx as ToolResolverServer);
 
   //then keep the event open until the underlying HTTP service closes
   return new Promise<void>(async (resolve, reject) => {
@@ -366,7 +432,8 @@ export default async function http(ctx: Server) {
       port,
       endpoint,
       mode,
-      { resolve, reject }
+      { resolve, reject },
+      registry
     );
 
     //finally start listening on the configured interface
@@ -392,6 +459,7 @@ export function attachHttpToServer(ctx: Server) {
     ctx as ToolResolverServer,
     header(req, 'authorization') || undefined
   );
+  const registry = loadRegistry(ctx as ToolResolverServer);
   const transport = new McpHttpServer(
     factory,
     authResolver,
@@ -399,7 +467,8 @@ export function attachHttpToServer(ctx: Server) {
     port,
     endpoint,
     mode,
-    { resolve: () => undefined, reject: error => { throw error; } }
+    { resolve: () => undefined, reject: error => { throw error; } },
+    registry
   );
 
   ctx.on('request', async ({ req, res }) => {

@@ -9,11 +9,16 @@ import {
   McpHttpServer,
   resolveHttpConfig
 } from '../src/scripts/http.js';
+import { createServer } from 'node:http';
+import { normalizeTool, readJsonBody } from '../src/helpers.js';
+import type { AuthContext } from '../src/types.js';
 import {
+  createApplication,
   createMockRequest,
   expectJson,
   header,
-  MockResponse
+  MockResponse,
+  serveAttached
 } from './helpers.js';
 
 type JsonRpcResponse = {
@@ -52,6 +57,7 @@ type TestTransport = {
 //this narrowed session map type lets the subclass mutate protected state
 // without reaching for any-casts.
 type SessionStore = Record<string, {
+  auth: AuthContext,
   server: { close: () => Promise<void> },
   transport: TestTransport
 }>;
@@ -80,7 +86,7 @@ class TestHttpServer extends McpHttpServer {
   /**
    * Create one fake session with deterministic request handling for tests.
    */
-  protected override async _createSession() {
+  protected override async _createSession(auth: AuthContext) {
     this.created++;
     const server = {
       close: async () => undefined
@@ -101,7 +107,7 @@ class TestHttpServer extends McpHttpServer {
         body: TestBody | undefined
       ) => {
         if (body?.method === 'initialize') {
-          sessions[sessionId] = { server, transport };
+          sessions[sessionId] = { auth, server, transport };
           res.statusCode = 200;
           res.setHeader('Content-Type', 'application/json');
           res.setHeader('mcp-session-id', sessionId);
@@ -131,7 +137,7 @@ class TestHttpServer extends McpHttpServer {
       }
     };
 
-    return { server, transport };
+    return { auth, server, transport };
   }
 }
 
@@ -149,10 +155,33 @@ const initialize = {
   }
 };
 
-function makeServer(mode: 'stateful' | 'stateless') {
+//this registry holds one scoped write tool and one public tool so the 403
+// path can be told apart from a tool that does not exist.
+const registry = async () => [
+  normalizeTool({
+    name: 'article_publish',
+    event: 'article-publish',
+    type: 'app',
+    method: 'POST',
+    scopes: [ 'articles.write' ]
+  })!,
+  normalizeTool({
+    name: 'public_ping',
+    event: 'public-ping',
+    type: 'public',
+    method: 'GET'
+  })!
+];
+
+function makeServer(
+  mode: 'stateful' | 'stateless',
+  authResolver: (req: IncomingMessage) => Promise<AuthContext> = async () => {
+    return { kind: 'public' };
+  }
+) {
   return new TestHttpServer(
     async () => null,
-    async () => ({ kind: 'public' }),
+    authResolver,
     '127.0.0.1',
     17759,
     '/mcp',
@@ -162,9 +191,39 @@ function makeServer(mode: 'stateful' | 'stateless') {
       reject: error => {
         throw error;
       }
-    }
+    },
+    registry
   );
 }
+
+//this caller holds one scope and presents the secret, so it is verified but
+// lacks articles.write.
+const reader = (): AuthContext => ({
+  kind: 'app',
+  token: { token: 'app_1:secret', id: 'app_1', secret: 'secret' },
+  application: createApplication({ scopes: [ 'articles.read' ] })
+});
+
+//this request helper posts one JSON-RPC body, optionally inside a session
+function post(body: unknown, session?: string) {
+  return createMockRequest({
+    method: 'POST',
+    url: '/mcp',
+    headers: {
+      host: 'localhost',
+      'content-type': 'application/json',
+      ...(session ? { 'mcp-session-id': session } : {})
+    },
+    body: JSON.stringify(body)
+  });
+}
+
+const callTool = (name: string) => ({
+  jsonrpc: '2.0',
+  id: 9,
+  method: 'tools/call',
+  params: { name, arguments: {} }
+});
 
 //this tiny config shape is enough for the transport config helper tests.
 type ConfigStub = {
@@ -447,5 +506,356 @@ describe('ai/http', () => {
 
     expect(resolved.host).to.equal('192.168.1.10');
     expect(resolved.port).to.equal(17759);
+  });
+
+  describe('key refusals', () => {
+    const authenticate = (kind: () => AuthContext) => async () => kind();
+
+    for (const mode of [ 'stateless', 'stateful' ] as const) {
+      it(`should answer 401 for an invalid key in ${mode} mode`, async () => {
+        const server = makeServer(mode, async () => ({ kind: 'invalid' }));
+        const res = new MockResponse();
+        await server.dispatch(post(initialize), res);
+
+        expect(res.statusCode).to.equal(401);
+        expect(res.headers.get('www-authenticate')).to.equal('Bearer');
+        expect(expectJson<JsonRpcResponse>(res.body).error?.message)
+          .to.equal('Unauthorized');
+        expect(server.created).to.equal(0);
+      });
+
+      it(`should answer 403 for a tool missing a scope in ${mode} mode`, async () => {
+        const server = makeServer(mode, authenticate(reader));
+        const res = new MockResponse();
+        const body = mode === 'stateless' ? callTool('article_publish') : initialize;
+        let session: string | undefined;
+
+        //a stateful caller first opens a session, then calls inside it
+        if (mode === 'stateful') {
+          const init = new MockResponse();
+          await server.dispatch(post(initialize), init);
+          session = header(Object.fromEntries(init.headers), 'mcp-session-id')!;
+        }
+
+        await server.dispatch(
+          post(mode === 'stateful' ? callTool('article_publish') : body, session),
+          res
+        );
+
+        expect(res.statusCode).to.equal(403);
+        const payload = expectJson<JsonRpcResponse>(res.body);
+        expect(payload.id).to.equal(9);
+        expect(payload.error?.message)
+          .to.equal('Forbidden MCP tool call: article_publish');
+      });
+
+      it(`should pass allowed and unregistered tool calls in ${mode} mode`, async () => {
+        const server = makeServer(mode, authenticate(reader));
+        let session: string | undefined;
+
+        if (mode === 'stateful') {
+          const init = new MockResponse();
+          await server.dispatch(post(initialize), init);
+          session = header(Object.fromEntries(init.headers), 'mcp-session-id')!;
+        }
+
+        //a public tool and a name the registry never heard of both reach the
+        // transport; the SDK answers the unknown name as not found.
+        for (const name of [ 'public_ping', 'missing_tool' ]) {
+          const res = new MockResponse();
+          await server.dispatch(post(callTool(name), session), res);
+          expect(res.statusCode).to.equal(200);
+        }
+      });
+    }
+
+    it('should answer 401 for an invalid key with no session in stateful mode', async () => {
+      const server = makeServer('stateful', async () => ({ kind: 'invalid' }));
+      const res = new MockResponse();
+      await server.dispatch(post(callTool('public_ping'), 'session-9'), res);
+
+      expect(res.statusCode).to.equal(401);
+    });
+
+    it('should end a live session when its key dies', async () => {
+      let current: AuthContext = reader();
+      const server = makeServer('stateful', async () => current);
+
+      const init = new MockResponse();
+      await server.dispatch(post(initialize), init);
+      const session = header(Object.fromEntries(init.headers), 'mcp-session-id')!;
+
+      //while the key is live the session keeps answering
+      const live = new MockResponse();
+      await server.dispatch(post(callTool('public_ping'), session), live);
+      expect(live.statusCode).to.equal(200);
+
+      //once the key dies the next request is refused and the session closed
+      current = { kind: 'invalid' };
+      const dead = new MockResponse();
+      await server.dispatch(post(callTool('public_ping'), session), dead);
+      expect(dead.statusCode).to.equal(401);
+      expect(dead.headers.get('www-authenticate')).to.equal('Bearer');
+      expect(server.oncloseCalls).to.equal(1);
+
+      //and it stays gone even if the key somehow resolves again
+      current = reader();
+      const gone = new MockResponse();
+      await server.dispatch(post(callTool('public_ping'), session), gone);
+      expect(gone.statusCode).to.equal(400);
+    });
+
+    it('should refuse a session request that presents a different key', async () => {
+      let current: AuthContext = reader();
+      const server = makeServer('stateful', async () => current);
+
+      const init = new MockResponse();
+      await server.dispatch(post(initialize), init);
+      const session = header(Object.fromEntries(init.headers), 'mcp-session-id')!;
+
+      //a valid but different caller, and an anonymous one, cannot use it
+      current = {
+        kind: 'app',
+        token: { token: 'app_2:secret', id: 'app_2', secret: 'secret' },
+        application: createApplication({ id: 'app_2' })
+      };
+      for (const caller of [ current, { kind: 'public' } as AuthContext ]) {
+        current = caller;
+        const res = new MockResponse();
+        await server.dispatch(post(callTool('public_ping'), session), res);
+        expect(res.statusCode).to.equal(401);
+      }
+
+      //refusing them does not close the session for its real owner
+      expect(server.oncloseCalls).to.equal(0);
+      current = reader();
+      const owner = new MockResponse();
+      await server.dispatch(post(callTool('public_ping'), session), owner);
+      expect(owner.statusCode).to.equal(200);
+    });
+
+    it('should skip the scope check when no registry loader is given', async () => {
+      const server = new TestHttpServer(
+        async () => null,
+        async () => reader(),
+        '127.0.0.1',
+        17759,
+        '/mcp',
+        'stateless',
+        { resolve: () => undefined, reject: error => { throw error; } }
+      );
+      const res = new MockResponse();
+      await server.dispatch(post(callTool('article_publish')), res);
+
+      expect(res.statusCode).to.equal(200);
+    });
+  });
+
+  describe('plumbing', () => {
+    //this promiser records what the transport settles with
+    const settle = () => {
+      const errors: unknown[] = [];
+      return {
+        errors,
+        promiser: {
+          resolve: () => undefined,
+          reject: (error: unknown) => { errors.push(error); }
+        }
+      };
+    };
+    const base = (port: number, promiser: ReturnType<typeof settle>['promiser']) =>
+      new McpHttpServer(
+        async () => null,
+        async () => ({ kind: 'public' }),
+        '127.0.0.1',
+        port,
+        '/mcp',
+        'stateful',
+        promiser
+      );
+
+    it('should answer 404 to a bare request through the public dispatch', async () => {
+      const server = base(17760, settle().promiser);
+      const res = new MockResponse();
+
+      //no url and no host header, so both fall back to the configured address
+      await server.dispatch(
+        createMockRequest({ url: '', headers: {} }),
+        res as unknown as ServerResponse
+      );
+
+      expect(res.statusCode).to.equal(404);
+    });
+
+    it('should end the socket when a failure comes after headers were sent', async () => {
+      const server = new McpHttpServer(
+        async () => null,
+        async () => { throw new Error('resolver failed'); },
+        '127.0.0.1',
+        17760,
+        '/mcp',
+        'stateful',
+        settle().promiser
+      );
+      const res = new MockResponse();
+      res.headersSent = true;
+
+      await server.dispatch(post(initialize), res as unknown as ServerResponse);
+
+      //nothing more is written once the response has already started
+      expect(res.body).to.equal('');
+    });
+
+    it('should answer 400 for a session id header sent more than once', async () => {
+      const server = makeServer('stateful');
+      const res = new MockResponse();
+
+      await server.dispatch(
+        createMockRequest({
+          method: 'POST',
+          url: '/mcp',
+          headers: { host: 'localhost', 'mcp-session-id': [ 'one', 'two' ] },
+          body: JSON.stringify(callTool('public_ping'))
+        }),
+        res
+      );
+
+      expect(res.statusCode).to.equal(400);
+    });
+
+    it('should reject start when the port is taken and settle the promiser', async () => {
+      const taken = createServer();
+      await new Promise<void>(resolve => taken.listen(0, '127.0.0.1', resolve));
+      const { port } = taken.address() as { port: number };
+      const { errors, promiser } = settle();
+      const server = base(port, promiser);
+
+      try {
+        await server.start();
+        expect.fail('Expected start to reject');
+      } catch (error) {
+        expect((error as NodeJS.ErrnoException).code).to.equal('EADDRINUSE');
+      } finally {
+        process.off('SIGINT', server.shutdown);
+        await new Promise<void>(resolve => taken.close(() => resolve()));
+      }
+      expect(errors).to.have.length(1);
+    });
+
+    it('should surface a close failure and run shutdown only once', async () => {
+      const server = base(17760, settle().promiser);
+
+      //the service never listened, so closing it is an error the first time
+      try {
+        await server.shutdown();
+        expect.fail('Expected shutdown to reject');
+      } catch (error) {
+        expect((error as NodeJS.ErrnoException).code)
+          .to.equal('ERR_SERVER_NOT_RUNNING');
+      }
+
+      //and a second call is a no-op instead of failing again
+      await server.shutdown();
+    });
+
+    describe('attached request hook', () => {
+      const attach = () => {
+        let listener: Function | undefined;
+        const ctx = {
+          requests: 0,
+          config: {
+            path<T>(key: string, fallback?: T) {
+              return (key === 'mcp.route' ? '/mcp' : fallback) as T;
+            }
+          },
+          on(event: string, callback: Function) {
+            if (event === 'request') {
+              ctx.requests++;
+              listener = callback;
+            }
+          },
+          plugin: <T>() => (async () => null) as T,
+          resolve: async () => null
+        };
+        attachHttpToServer(ctx as never);
+        return { ctx, listener: () => listener! };
+      };
+
+      it('should attach only once per server', () => {
+        const { ctx } = attach();
+        attachHttpToServer(ctx as never);
+
+        expect(ctx.requests).to.equal(1);
+      });
+
+      it('should refuse a bad key and let other requests pass through', async () => {
+        const { listener } = attach();
+        const served = await serveAttached(listener(), readJsonBody);
+
+        try {
+          //an unknown key is looked up, found missing, and answered 401
+          const bad = await fetch(`${served.base}/mcp`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              Authorization: 'Bearer nobody:x'
+            },
+            body: JSON.stringify(initialize)
+          });
+          expect(bad.status).to.equal(401);
+          await bad.text();
+
+          //no key is a public caller, which reaches the factory; this test
+          // factory resolves no server, so the request ends in a 500
+          const anon = await fetch(`${served.base}/mcp`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(initialize)
+          });
+          expect(anon.status).to.equal(500);
+          await anon.text();
+
+          //a different path or method is not this transport's request
+          for (const [ method, path ] of [ [ 'POST', '/other' ], [ 'GET', '/mcp' ] ]) {
+            const other = await fetch(`${served.base}${path}`, {
+              method,
+              ...(method === 'POST' ? { body: '{}' } : {})
+            });
+            expect(other.status).to.equal(204);
+            expect(other.headers.get('x-passed-through')).to.equal('yes');
+          }
+        } finally {
+          await served.close();
+        }
+      });
+
+      it('should ignore requests that are not Node requests', async () => {
+        const { listener } = attach();
+
+        const result = await listener()({
+          req: { resource: {}, data: () => null },
+          res: { resource: {}, stop: () => undefined }
+        });
+
+        expect(result).to.equal(undefined);
+      });
+
+      it('should fall back to the configured address for a bare request', async () => {
+        const { listener } = attach();
+        const result = await listener()({
+          req: {
+            resource: Object.assign(Object.create(IncomingMessage.prototype), {
+              method: 'POST',
+              headers: {}
+            }),
+            data: () => null
+          },
+          res: { resource: Object.create(ServerResponse.prototype), stop: () => undefined }
+        });
+
+        //no url means the root path, which is not the MCP endpoint
+        expect(result).to.equal(undefined);
+      });
+    });
   });
 });

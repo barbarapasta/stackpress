@@ -45,6 +45,7 @@ export const config: Config = {
       cssFiles: [ 
         'frui/frui.css', 
         'stackpress/stackpress.css', 
+        'stackpress-ai/styles.css',
         'virtual:uno.css' 
       ],
       //template wrapper for the document markup (html)

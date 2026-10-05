@@ -6,6 +6,7 @@ import { useLanguage } from 'r22n';
 //stackpress
 import type { ServerConfigPageProps } from 'stackpress/view/client';
 import { useResponse, LayoutPanel } from 'stackpress/view/client';
+import { AgentPanel } from 'stackpress-ai/client';
 //client
 import type { ArticleExtended } from 'blog-client/types';
 //plugins/app
@@ -211,6 +212,7 @@ export function Page(props: ServerConfigPageProps) {
       response={response}
     >
       <Body />
+      <AgentPanel signedIn={Boolean(session?.id)} />
     </LayoutPanel>
   );
 };

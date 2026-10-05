@@ -31,6 +31,7 @@ export const config: Config = {
       cssFiles: [ 
         'frui/frui.css', 
         'stackpress/stackpress.css', 
+        'stackpress-ai/styles.css',
         'virtual:uno.css' 
       ],
       optimizeDeps: { 
@@ -137,6 +138,7 @@ export const config: Config = {
   database: common.database,
   email: common.email,
   language: common.language,
+  agent: common.agent,
   mcp: common.mcp,
   terminal: common.terminal
 };

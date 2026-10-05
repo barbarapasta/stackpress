@@ -11,13 +11,19 @@ import type {
   McpServer,
   McpSseSession,
   Promiser,
+  ToolRegistry,
   ToolResolverServer
 } from '../types.js';
 import {
+  findForbiddenCall,
   readJsonBody,
   resolveListAuth,
-  sendText
+  sameCaller,
+  sendForbidden,
+  sendText,
+  sendUnauthorized
 } from '../helpers.js';
+import { loadRegistry } from './tools.js';
 
 const SSE_ATTACH_KEY = '__stackpress_ai_sse_attached__';
 const SSE_BODY_UNSET = Symbol('SSE_BODY_UNSET');
@@ -82,6 +88,9 @@ export class McpSseServer {
   protected _port: number;
   //this promise bridge keeps the CLI event open until the server exits
   protected _promiser: Promiser<void>;
+  //this loader returns the full registry so forbidden calls can be told apart
+  // from missing tools before the transport runs
+  protected _registry?: ToolRegistry;
   //this Node server accepts the SSE handshake and message requests
   protected _service = createServer(this._handleRequest.bind(this));
   //this session map lets message requests route back to one live SSE session
@@ -97,7 +106,8 @@ export class McpSseServer {
     port: number,
     endpoint: string,
     messages: string,
-    promiser: Promiser<void>
+    promiser: Promiser<void>,
+    registry?: ToolRegistry
   ) {
     this._factory = factory;
     this._authResolver = authResolver;
@@ -106,6 +116,7 @@ export class McpSseServer {
     this._endpoint = endpoint;
     this._messages = messages;
     this._promiser = promiser;
+    this._registry = registry;
     this.shutdown = async () => {
       if (this._exiting) return;
       this._exiting = true;
@@ -171,9 +182,10 @@ export class McpSseServer {
   protected async _createServer(auth: AuthContext): Promise<McpServer> {
     const server = await this._factory(auth);
 
-    //if config produced no tools, fail loudly so the CLI does not hang
+    //a caller that sees no tools still gets a server with an empty list, so
+    // only a factory that made no server at all is a failure here
     if (!server) {
-      throw new Error('Resolved MCP tool registry is empty.');
+      throw new Error('No MCP server was created for this caller.');
     }
 
     return server;
@@ -191,17 +203,44 @@ export class McpSseServer {
     //the session id lives in the query string for the SSE message endpoint
     const sessionId = url.searchParams.get('sessionId');
 
+    //resolve the key again on every post so a key that died mid-session ends
+    // the stream instead of riding on the connection it opened.
+    const auth = await this._authResolver(req);
+    const session = sessionId ? this._sessions[sessionId] : undefined;
+    if (auth.kind === 'invalid') {
+      if (session) {
+        await session.transport.close();
+      }
+      sendUnauthorized(res);
+      return;
+    }
+
     //if the session is missing, then the message cannot be routed anywhere
-    if (!sessionId || !this._sessions[sessionId]) {
+    if (!session) {
       sendText(res, 404, 'Session not found');
       return;
     }
 
-    //read the JSON body and hand it back to the active SSE transport
+    //the post must present the same key the stream was opened with
+    if (!sameCaller(session.auth, auth)) {
+      sendUnauthorized(res);
+      return;
+    }
+
+    //read the JSON body, refuse a call to a tool the caller lacks, and then
+    // hand it back to the active SSE transport
     const payload = body === SSE_BODY_UNSET
       ? await readJsonBody(req)
       : body;
-    await this._sessions[sessionId].transport.handlePostMessage(req, res, payload);
+    const forbidden = this._registry
+      ? await findForbiddenCall(this._registry, auth, payload)
+      : null;
+    if (forbidden) {
+      sendForbidden(res, forbidden.id, forbidden.name);
+      return;
+    }
+
+    await session.transport.handlePostMessage(req, res, payload);
   }
 
   /**
@@ -221,7 +260,14 @@ export class McpSseServer {
 
       //for GET on the SSE endpoint, start one long-lived event stream session
       if (req.method === 'GET' && url.pathname === this._endpoint) {
-        await this._handleSseConnection(req, res);
+        //refuse a key that failed verification before any stream is opened
+        const auth = await this._authResolver(req);
+        if (auth.kind === 'invalid') {
+          sendUnauthorized(res);
+          return;
+        }
+
+        await this._handleSseConnection(req, res, auth);
         return;
       }
 
@@ -248,10 +294,10 @@ export class McpSseServer {
    * Open one SSE session and register it in the live session map.
    */
   protected async _handleSseConnection(
-    req: IncomingMessage,
-    res: ServerResponse
+    _req: IncomingMessage,
+    res: ServerResponse,
+    auth: AuthContext
   ) {
-    const auth = await this._authResolver(req);
     //first build one MCP tool server from the registered factory
     const server = await this._createServer(auth);
 
@@ -288,6 +334,7 @@ export default async function sse(ctx: Server) {
     ctx as ToolResolverServer,
     header(req, 'authorization') || undefined
   );
+  const registry = loadRegistry(ctx as ToolResolverServer);
 
   //then keep the event open until the underlying HTTP service closes
   return new Promise<void>(async (resolve, reject) => {
@@ -298,7 +345,8 @@ export default async function sse(ctx: Server) {
       port,
       endpoint,
       messages,
-      { resolve, reject }
+      { resolve, reject },
+      registry
     );
 
     //finally start listening on the configured interface
@@ -324,6 +372,7 @@ export function attachSseToServer(ctx: Server) {
     ctx as ToolResolverServer,
     header(req, 'authorization') || undefined
   );
+  const registry = loadRegistry(ctx as ToolResolverServer);
   const transport = new McpSseServer(
     factory,
     authResolver,
@@ -331,7 +380,8 @@ export function attachSseToServer(ctx: Server) {
     port,
     endpoint,
     messages,
-    { resolve: () => undefined, reject: error => { throw error; } }
+    { resolve: () => undefined, reject: error => { throw error; } },
+    registry
   );
 
   ctx.on('request', async ({ req, res }) => {

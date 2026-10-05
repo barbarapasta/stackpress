@@ -37,6 +37,8 @@ The public Stackpress config type includes these top-level areas:
 - `view`
 - `auth`
 - `session`
+- `mcp`
+- `agent`
 
 Not every app needs every area. Most apps start with `server`, then add `client`, `database`, and `view` as the project grows.
 
@@ -354,6 +356,96 @@ admin: {
   }]
 }
 ```
+
+## `mcp`
+
+Use `mcp` when your app should offer its events as tools to outside AI clients over the Model Context Protocol. The `stackpress-ai` plugin must be loaded. The MCP transports register only when this section exists.
+
+### Common Keys
+
+| Key | Type | Default / Notes |
+| --- | --- | --- |
+| `name` | `string` | Server name sent to clients. Defaults to `Stackpress AI Server`. |
+| `title` | `string` | Display title. Defaults to `Stackpress AI Server`. |
+| `description` | `string` | Optional description sent to clients. |
+| `version` | `string` | Server version sent to clients. Defaults to the package version. |
+| `route` | `string` | Streamable HTTP route. Defaults to `/mcp`. |
+| `mode` | `'stateful' \| 'stateless'` | HTTP session mode. Defaults to `'stateful'`. |
+| `host` | `string` | Defaults to `server.host`. When host and port match the main server, the route is attached to it. |
+| `port` | `number` | Defaults to `server.port`. |
+| `messages` | `string` | SSE message route. Defaults to `/messages`. |
+| `sse` | `{ host?: string; port?: number; route?: string; key?: string }` | Enables the legacy SSE transport. Host, port and route default to the `mcp` values. `key` is an internal name for the attached routes and rarely needs setting. |
+| `tools` | `ToolConfig[]` | Tools served from config. Plugins can add more with the `ai-tools` event. |
+
+A tool has `event` (required) and optional `name`, `title`, `description`, `method` (defaults to `GET`), `input` and `output` (JSON Schema), `type` (`public`, `app` or `user`; defaults to `public`), `scopes` (a caller needs all of them), `data`, `mode`, `inverse`, `irreversible`, `agent` and `operation`. The last four matter to the built-in agent; see [stackpress-ai](../packages/stackpress-ai/README.md).
+
+The source types are `McpConfig` and `ToolConfig` from `packages/stackpress-ai/src/types.ts`.
+
+### Example
+
+```ts
+mcp: {
+  name: 'Blog MCP',
+  route: '/mcp',
+  mode: 'stateful',
+  tools: [{
+    name: 'article_search',
+    type: 'app',
+    method: 'GET',
+    event: 'article-search',
+    scopes: [ 'articles.read' ],
+    input: { type: 'object', properties: { q: { type: 'string' } } }
+  }]
+}
+```
+
+### What It Affects
+
+- the MCP routes and the `mcp-http`, `mcp-sse` and `mcp-stdio` events
+- which tools a caller sees, by key, type and scopes
+- a presented key is checked on every request: it must exist, be active, be unexpired and match its secret, or the request is answered `401`
+
+## `agent`
+
+Use `agent` when your app should have the built-in chat agent. The `stackpress-ai` plugin must be loaded and `stackpress-ai/schema.idea` added to the app's idea file. The agent turns on only when this section exists, and it registers the chat routes under `base`.
+
+### Shape
+
+| Key | Type | Default / Notes |
+| --- | --- | --- |
+| `providers` | `Record<'anthropic' \| 'openai' \| 'openrouter', { key: string }>` | Required. `key` is the name of the environment variable that holds the provider's key, not the key. |
+| `model` | `string` | Required. The default model identifier. It has to be in `models`. |
+| `models` | `{ provider: string; model: string; title?: string }[]` | Required. The models the picker offers. |
+| `instructions` | `string` | Extra text added to the agent's instructions. |
+| `limit` | `number` | Tokens (input plus output) one person may use per UTC day. No limit when unset. |
+| `approvalTtl` | `number` | Milliseconds a pending approval stays valid. When unset it ends only when the person sends a new message. |
+| `steps` | `number` | Model calls one turn may make. Defaults to `8`. |
+| `base` | `string` | Mount path of the chat routes. Defaults to `/agent`. |
+
+The source type is `AgentConfig` from `packages/stackpress-ai/src/types.ts`.
+Keys are read from the environment each time they are needed. With no key set for the chosen provider, a message is answered `503` and the rest of the server keeps running. If the app sets `session.access`, add `/agent/**` for the roles that may use the agent.
+
+### Example
+
+```ts
+agent: {
+  providers: { anthropic: { key: 'ANTHROPIC_API_KEY' } },
+  model: 'claude-opus-5-5',
+  models: [{
+    provider: 'anthropic',
+    model: 'claude-opus-5-5',
+    title: 'Claude Opus 5.5'
+  }],
+  limit: 200000,
+  approvalTtl: 1000 * 60 * 30
+}
+```
+
+### What It Affects
+
+- the `ai-*` events and the chat routes under `base`
+- the four agent tables added by `stackpress-ai/schema.idea`
+- which models a person can pick and how many tokens they may use per day
 
 ## `email`
 

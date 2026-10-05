@@ -30,6 +30,7 @@ export const config: Config = {
       cssFiles: [ 
         'frui/frui.css', 
         'stackpress/stackpress.css', 
+        'stackpress-ai/styles.css',
         'virtual:uno.css' 
       ],
       //path where to save and load (live) the server script (js)

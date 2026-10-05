@@ -6,6 +6,7 @@ import { useLanguage } from 'r22n';
 //stackpress
 import type { ServerConfigPageProps } from 'stackpress/view/client';
 import { useResponse, LayoutPanel } from 'stackpress/view/client';
+import { AgentPanel } from 'stackpress-ai/client';
 //client
 import type { ArticleExtended, CommentExtended } from 'blog-client/types';
 //plugins/app
@@ -132,6 +133,17 @@ export function Head(props: ServerConfigPageProps) {
 
 export function Page(props: ServerConfigPageProps) {
   const { data, session, request, response } = props;
+  const article = response.results as ArticlePageArticle | undefined;
+  //what this page is about, as the agent panel's context chips: the article
+  //and each comment on it. They are hints, which the person can remove
+  const context = article ? [
+    { type: 'article', id: article.id, label: article.title },
+    ...(article.comments || []).map(comment => ({
+      type: 'comment',
+      id: comment.id,
+      label: `Comment: ${(comment.comment || '').slice(0, 40)}`
+    }))
+  ] : [];
   return (
     <LayoutPanel
       data={data}
@@ -140,6 +152,11 @@ export function Page(props: ServerConfigPageProps) {
       response={response}
     >
       <Body />
+      <AgentPanel
+        signedIn={Boolean(session?.id)}
+        context={context}
+        starters={article ? [ `Publish ${article.id}` ] : []}
+      />
     </LayoutPanel>
   );
 };

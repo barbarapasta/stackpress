@@ -1,4 +1,5 @@
 use "stackpress/stackpress.idea"
+use "stackpress-ai/schema.idea"
 
 enum PublishStatus {
   DRAFT "DRAFT"

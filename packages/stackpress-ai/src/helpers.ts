@@ -7,17 +7,23 @@ import type { Application, Session } from 'stackpress-api/types';
 //client
 import type {
   AuthContext,
+  Caller,
   NormalizedToolConfig,
   Token,
   ToolConfig,
+  ToolRegistry,
   ToolResolverServer
 } from './types.js';
 
-//this supported method list is shared by normalization and secret checks so
-// the package uses one owned definition of read and write verbs.
+//this supported method list is owned by normalization so the package has one
+// definition of the verbs a tool may declare.
 const METHODS = [ 'GET', 'POST', 'PUT', 'PATCH', 'DELETE' ] as const;
 
 type SupportedMethod = typeof METHODS[number];
+
+//these fields tell a tool event who is calling, so tool input may not carry
+// them.
+const IDENTITY_FIELDS = [ 'profileId', 'applicationId', 'sessionId' ] as const;
 
 //--------------------------------------------------------------------//
 // Functions
@@ -45,6 +51,25 @@ export async function resolveTool(
   ctx: ToolResolverServer,
   config: ToolConfig
 ): Promise<NormalizedToolConfig | null> {
+  const merged = await resolveToolConfig(ctx, config);
+
+  //if the plugin did not give back a usable tool config, then drop it
+  if (!merged) {
+    return null;
+  }
+
+  //finally normalize defaults and reject unsupported methods
+  return normalizeTool(merged);
+}
+
+/**
+ * Resolve one tool entry into a named but not yet normalized config, so two
+ * entries for the same tool can be merged before defaults fill in the gaps.
+ */
+export async function resolveToolConfig(
+  ctx: ToolResolverServer,
+  config: ToolConfig
+): Promise<ToolConfig | null> {
   //if the config is deferred, first ask the plugin event for its defaults
   const resolved = config.mode === 'plugin'
     ? await resolvePluginTool(ctx, config)
@@ -66,13 +91,7 @@ export async function resolveTool(
     merged.name = inferName(merged.event);
   }
 
-  //if the config did not title the tool, derive a readable label
-  if (!merged.title) {
-    merged.title = inferTitle(merged.name || merged.event);
-  }
-
-  //finally normalize defaults and reject unsupported methods
-  return normalizeTool(merged);
+  return merged;
 }
 
 /**
@@ -214,7 +233,7 @@ export function parseAuthorization(
 }
 
 /**
- * Resolve the auth context used by tools/list.
+ * Resolve the auth context used by tools/list and tools/call.
  */
 export async function resolveListAuth(
   ctx: ToolResolverServer,
@@ -230,16 +249,44 @@ export async function resolveListAuth(
   // when the same id could theoretically resolve in both tables.
   const application = await resolveApplication(ctx, token.id);
   if (application) {
-    return { kind: 'app', token, application };
+    //a presented key must be live and carry the matching secret, otherwise
+    // it is refused instead of being downgraded to a public caller.
+    return isLive(application) && secretAllowed(token.secret, application.secret)
+      ? { kind: 'app', token, application }
+      : { kind: 'invalid' };
   }
 
   //only fall back to the user session if no application was found
   const session = await resolveSession(ctx, token.id);
   if (session) {
-    return { kind: 'user', token, session };
+    return isLive(session) && secretAllowed(token.secret, session.secret)
+      ? { kind: 'user', token, session }
+      : { kind: 'invalid' };
   }
 
-  return { kind: 'public' };
+  //a key that matches neither table is unknown, which is not the same as no key
+  return { kind: 'invalid' };
+}
+
+/**
+ * Check that a key record is active and has not expired.
+ */
+export function isLive(record: {
+  active?: boolean | null,
+  expires?: Date | string | number | null
+}) {
+  //only an explicit false deactivates a key
+  if (record.active === false) {
+    return false;
+  }
+
+  //a key without an expiry never expires
+  if (record.expires === null || record.expires === undefined) {
+    return true;
+  }
+
+  //an unreadable expiry yields NaN, which fails the comparison and so refuses
+  return new Date(record.expires).getTime() > Date.now();
 }
 
 /**
@@ -280,33 +327,70 @@ export async function resolveSession(
 }
 
 /**
- * Merge static tool data, runtime input, and auth context into one payload.
+ * Merge static tool data, runtime input, and the caller's identity into one
+ * payload. Identity fields are owned by the system: input can never set them,
+ * so they are stripped from input and then written only from the caller.
  */
 export function withToolData(
   tool: NormalizedToolConfig,
   input: Record<string, unknown>,
-  auth?: AuthContext
+  caller?: Caller
 ) {
+  const rest = { ...input };
+  for (const field of IDENTITY_FIELDS) {
+    delete rest[field];
+  }
+
   //start with config defaults, then let caller input override those defaults
   const data: Record<string, unknown> = {
     ...tool.data,
-    ...input
+    ...rest
   };
 
   //app-scoped tools often need the calling application id downstream.
-  if (auth?.kind === 'app') {
-    data.applicationId = auth.application.id;
+  if (caller?.kind === 'app') {
+    data.applicationId = caller.applicationId;
   }
 
   //if this is a user-scoped tool, then inject the user context that downstream
   // events expect to see.
-  if (auth?.kind === 'user') {
-    data.profileId = auth.session.profileId;
-    data.applicationId = auth.session.applicationId;
-    data.sessionId = auth.session.id;
+  if (caller?.kind === 'user') {
+    data.profileId = caller.profileId;
+    data.applicationId = caller.applicationId;
+    data.sessionId = caller.sessionId;
   }
 
   return data;
+}
+
+/**
+ * Turn a verified auth context into the caller record a tool event receives.
+ * A key that failed verification has no caller.
+ */
+export function callerFromAuth(auth?: AuthContext): Caller | null {
+  if (!auth || auth.kind === 'public') {
+    return { kind: 'public', scopes: [] };
+  }
+
+  if (auth.kind === 'app') {
+    return {
+      kind: 'app',
+      applicationId: auth.application.id,
+      scopes: [ ...auth.application.scopes ]
+    };
+  }
+
+  if (auth.kind === 'user') {
+    return {
+      kind: 'user',
+      profileId: auth.session.profileId,
+      sessionId: auth.session.id,
+      applicationId: auth.session.applicationId,
+      scopes: [ ...auth.session.scopes ]
+    };
+  }
+
+  return null;
 }
 
 /**
@@ -316,23 +400,28 @@ export function toolAllowed(
   tool: NormalizedToolConfig,
   auth: AuthContext
 ) {
-  //public tools are always visible regardless of auth
+  //a key that failed verification never sees or calls anything
+  if (auth.kind === 'invalid') {
+    return false;
+  }
+
+  //public tools are visible to every verified or anonymous caller
   if (tool.type === 'public') {
     return true;
   }
 
-  //app tools only show up for apps that own at least one required scope
+  //app tools only show up for apps that own every required scope
   if (tool.type === 'app') {
     return auth.kind === 'app'
       && hasRequiredScopes(auth.application.scopes, tool.scopes)
-      && secretAllowed(tool.method, auth.token.secret, auth.application.secret);
+      && secretAllowed(auth.token.secret, auth.application.secret);
   }
 
-  //user tools only show up for sessions that own at least one required scope
+  //user tools only show up for sessions that own every required scope
   if (tool.type === 'user') {
     return auth.kind === 'user'
       && hasRequiredScopes(auth.session.scopes, tool.scopes)
-      && secretAllowed(tool.method, auth.token.secret, auth.session.secret);
+      && secretAllowed(auth.token.secret, auth.session.secret);
   }
 
   return false;
@@ -350,9 +439,60 @@ export function listToolsForAuth(
 
 /**
  * Decide whether a method should require the secret half of the token pair.
+ * Every method does now; the export stays for the public helpers subpath.
  */
-export function requiresSecret(method: string) {
-  return String(method).toUpperCase() !== 'GET';
+export function requiresSecret(_method: string) {
+  return true;
+}
+
+/**
+ * Check whether two resolved callers are the same presented key.
+ */
+export function sameCaller(a: AuthContext, b: AuthContext) {
+  if (a.kind === 'public' || b.kind === 'public') {
+    return a.kind === b.kind;
+  }
+
+  return a.kind !== 'invalid'
+    && b.kind !== 'invalid'
+    && a.kind === b.kind
+    && a.token.token === b.token.token;
+}
+
+/**
+ * Find the first tools/call in one JSON-RPC body that names a registered tool
+ * the caller may not use. The full registry is searched because the per-caller
+ * registry no longer holds such a tool, so the MCP SDK would only answer
+ * "tool not found" inside a 200.
+ */
+export async function findForbiddenCall(
+  registry: ToolRegistry,
+  auth: AuthContext,
+  body: unknown
+) {
+  //a body can be one message or a batch of them
+  const calls = (Array.isArray(body) ? body : [ body ]).filter(
+    message => isRecord(message)
+      && message.method === 'tools/call'
+      && isRecord(message.params)
+      && typeof message.params.name === 'string'
+  ) as { id?: unknown, params: { name: string } }[];
+
+  //skip loading the registry when the body calls nothing
+  if (!calls.length) {
+    return null;
+  }
+
+  const tools = await registry();
+  for (const call of calls) {
+    const tool = tools.find(tool => tool.name === call.params.name);
+    //an unregistered name is left to the MCP SDK to report as not found
+    if (tool && !toolAllowed(tool, auth)) {
+      return { id: call.id ?? null, name: call.params.name };
+    }
+  }
+
+  return null;
 }
 
 /**
@@ -419,6 +559,33 @@ export function sendText(
 }
 
 /**
+ * Refuse a request whose key failed verification.
+ */
+export function sendUnauthorized(res: ServerResponse) {
+  res.setHeader('WWW-Authenticate', 'Bearer');
+  sendJson(res, 401, {
+    jsonrpc: '2.0',
+    error: { code: -32001, message: 'Unauthorized' },
+    id: null
+  });
+}
+
+/**
+ * Refuse a verified caller that lacks access to the named tool.
+ */
+export function sendForbidden(
+  res: ServerResponse,
+  id: unknown,
+  name: string
+) {
+  sendJson(res, 403, {
+    jsonrpc: '2.0',
+    error: { code: -32002, message: `Forbidden MCP tool call: ${name}` },
+    id
+  });
+}
+
+/**
  * Wrap results into the MCP text content format.
  */
 export function toMcpText<T>(results: T): CallToolResult {
@@ -461,23 +628,15 @@ export function isRecord(value: unknown): value is Record<string, unknown> {
 }
 
 /**
- * Check whether one caller has at least one required scope for a tool.
+ * Check whether one caller has every scope a tool requires.
  */
 function hasRequiredScopes(owned: string[], required: string[]) {
-  return required.length === 0 || owned.some(scope => required.includes(scope));
+  return required.every(scope => owned.includes(scope));
 }
 
 /**
- * Check whether the caller supplied the secret needed for one tool method.
+ * Check whether the caller supplied the secret that matches the stored one.
  */
-function secretAllowed(
-  method: string,
-  provided: string,
-  expected?: string | null
-) {
-  if (!requiresSecret(method)) {
-    return true;
-  }
-
+function secretAllowed(provided: string, expected?: string | null) {
   return !!provided.length && !!expected?.length && provided === expected;
 }
