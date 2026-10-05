@@ -1,0 +1,16 @@
+ok   GET /articles/pokemon-turns-30-how-the-fictional-pocket-monsters-shaped-science is 200 -- 200
+ok   the limit state is shown -- Daily limit reached |  | You can use the agent again after Oct 6, 2026, 12:00 AM.
+ok   it says when the allowance resets
+ok   the composer is gone
+ok   the first exchange is still on screen and the refused message is not
+ok   two messages were sent, the second refused -- 2
+ok   the second answer was a 429 -- 200,429
+shot 00007-wide-limit.png (clipped to 640x800 at 640,0)
+ok   no page errors
+ok   no failed request on the blog beyond the expected 429
+other failed requests (not the blog) ["https://www.minecraft.net/content/dam/minecraftnet/games/minecraft/key-art/MSpotlight_HEADER.jpg net::ERR_HTTP2_PROTOCOL_ERROR"]
+ok   GET /articles/pokemon-turns-30-how-the-fictional-pocket-monsters-shaped-science is 200 -- 200
+shot 00007-narrow-limit.png
+ok   no page errors on the narrow screen
+
+all checks passed

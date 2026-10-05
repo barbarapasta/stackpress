@@ -1,0 +1,13 @@
+{
+  "type": "module",
+  "name": "proof-agent-turn-streaming",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Spec 00004 P-002: can a chat turn stream, fall back to one response, and resume after an approval pause from stored state alone?",
+  "scripts": {
+    "prove": "node prove.mjs"
+  },
+  "dependencies": {
+    "@stackpress/ingest": "0.10.8"
+  }
+}

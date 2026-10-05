@@ -1,0 +1,14 @@
+{
+  "type": "module",
+  "name": "proof-agent-provider-parity",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Spec 00004 P-003: can one conversation loop drive Anthropic, OpenAI, and OpenRouter through adapters with no provider-specific branches?",
+  "scripts": {
+    "prove": "node prove.mjs"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "0.131.0",
+    "openai": "7.27.0"
+  }
+}

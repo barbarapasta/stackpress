@@ -1,0 +1,203 @@
+
+== wide screen: 1280 x 800
+ok   GET /articles/pokemon-turns-30-how-the-fictional-pocket-monsters-shaped-science is 200 -- 200
+ok   signed out: the panel offers a sign in link -- /auth/signin
+ok   signed out: the panel made no request
+shot 00007-wide-signed-out.png (clipped to 640x800 at 640,0)
+ok   the article has two comments to work with -- x9wu88javflu5nljkr8dzj0g,h36nntzx4a8bs6fxrm32z19h
+ok   server render: the launcher is in the HTML sent, before any script runs
+ok   server render: the panel itself is not (closed)
+ok   GET /articles/pokemon-turns-30-how-the-fictional-pocket-monsters-shaped-science is 200 -- 200
+ok   hydration: no console or page errors on load
+ok   keyboard: Tab reaches the launcher
+ok   keyboard: the launcher says it is collapsed
+ok   keyboard: opening puts focus in the message field -- textarea#agent-message.agent-input-text
+ok   opening made one request: start -- GET /agent/start
+ok   hydration: still no errors after opening
+ok   context: the page address and three items are chips -- /articles/pokemon-turns-30-how-the-fictional-pocket-monsters-shaped-science | Pokémon turns 30 — how the fictional pocket monsters shaped science | Comment: Great article! | Comment: Congrats on 30 years of Pokémon!
+ok   the app starter prompt is offered
+ok   file attach: no control, since the blog gave no upload handler
+ok   the model picker offers the two models
+contrast [[".agent-status",8.73],[".agent-title",8.73],[".agent-button",10.34],[".agent-note",10.34],[".agent-chip-label",8.73]]
+ok   contrast: every text colour measured is at least 4.5:1 -- []
+shot 00007-wide-empty-with-context.png (clipped to 640x800 at 640,0)
+ok   context: the chip is gone from the bar
+ok   one message sent, once
+ok   model: the picked model was sent -- openai/gpt-6.1-sol
+ok   the anti-forgery token went with the message
+ok   context: the removed chip was not sent -- ["Pokémon turns 30 — how the fictional pocket monsters shaped science","Comment: Great article!"]
+ok   the reply came as an event stream
+ok   reversible action: a Done card with Undo
+ok   its status says Done
+ok   the panel is back after the page refreshed itself
+ok   the chat comes back with the model it used
+shot 00007-wide-reversible-done.png
+ok   waiting card: names the action and shows its input -- Comment delete | Waiting for approval | id | x9wu88javflu5nljkr8dzj0g |  | Nothing runs until you approve. Expires Oct 5, 2026, 3:29 AM. |  | Approve | Decline
+ok   waiting card: says nothing runs until approval
+ok   waiting card: Approve and Decline, and no Undo
+ok   focus: the waiting card has focus, not a button -- article#agent-card-0muunvhqk0000e44a8a4465a.agent-card agent-card-waiting
+ok   waiting: the comment is still there, nothing ran
+contrast with cards [[".agent-status",8.73],[".agent-title",8.73],[".agent-button",5.56],[".agent-primary",5.56],[".agent-user .agent-text",5.56],[".agent-agent .agent-text",8.73],[".agent-badge",8.73],[".agent-input dt",5.99],[".agent-input dd",11.47],[".agent-note",10.34],[".agent-card-hint",11.47],[".agent-chip-label",8.73]]
+ok   contrast: with cards on screen, every text colour measured is at least 4.5:1 -- []
+shot 00007-wide-waiting-approval.png
+shot 00007-wide-page-before-approval.png (clipped to 880x800 at 0,0)
+ok   double click on Approve sent one request -- 1
+ok   approved: the comment is deleted and the page behind shows it -- h36nntzx4a8bs6fxrm32z19h
+ok   the page was refreshed: one comment left on screen -- 1
+ok   three done cards: publish, publish, delete -- 3
+ok   the approved irreversible action has no Undo
+ok   the reply went on after approval
+shot 00007-wide-approved.png
+shot 00007-wide-page-after-approval.png (clipped to 880x800 at 0,0)
+ok   focus: the new waiting card has focus after the reload
+ok   keyboard: Tab goes to Approve first -- Approve Comment delete
+ok   keyboard: the next Tab goes to Decline -- Decline Comment delete
+ok   declined: the card says Declined
+ok   declined: the comment is still there
+ok   focus: after Decline it is on the card, not lost -- article#agent-card-0muunvjwi00005d048dc5283.agent-card agent-card-declined
+ok   a status line was announced -- Comment delete was declined.
+shot 00007-wide-declined.png
+ok   undo: the card says Undone -- Undone
+ok   undo: that card has no Undo left
+ok   undo: the article is back to draft on the server -- DRAFT
+shot 00007-wide-undone.png
+ok   history: earlier chats are listed -- 1
+shot 00007-wide-history.png (clipped to 640x800 at 640,0)
+ok   new chat: the conversation is empty
+ok   new chat: the page context is offered again, including the chip taken off before -- 3 chips
+ok   history: opening a chat brings back its cards and their statuses -- 5 of 5
+ok   history: the statuses came back -- Undone,Done,Done,Done,Declined
+ok   keyboard: Escape closes the panel
+ok   keyboard: focus is back on the launcher -- button#.agent-launcher
+--- accessibility tree of the open panel ---
+- complementary "Agent chat":
+  - heading "Agent" [level=2]
+  - paragraph: Ready for a follow-up
+  - button "New chat"
+  - button "History"
+  - button "Close agent": Close
+  - list "Page context":
+    - listitem:
+      - text: /articles/pokemon-turns-30-how-the-fictional-pocket-monsters-shaped-science
+      - button "Remove /articles/pokemon-turns-30-how-the-fictional-pocket-monsters-shaped-science": ×
+    - listitem:
+      - text: Pokémon turns 30 — how the fictional pocket monsters shaped science
+      - button "Remove Pokémon turns 30 — how the fictional pocket monsters shaped science": ×
+    - listitem:
+      - text: "Comment: Congrats on 30 years of Pokémon!"
+      - 'button "Remove Comment: Congrats on 30 years of Pokémon!"': ×
+  - log "Conversation":
+    - article:
+      - text: You
+      - paragraph: publish pokemon
+    - group "Article publish":
+      - strong: Article publish
+      - text: Undone
+      - term: id
+      - definition: pokemon
+    - article:
+      - text: Agent
+      - paragraph: Published pokemon.
+    - article:
+      - text: You
+      - paragraph: publish pokemon and delete comment x9wu88javflu5nljkr8dzj0g
+    - group "Article publish":
+      - strong: Article publish
+      - text: Done
+      - term: id
+      - definition: pokemon
+      - paragraph: Pokémon turns 30 — how the fictional pocket monsters shaped science
+      - group: Details
+      - button "Undo Article publish": Undo
+    - article:
+      - text: Agent
+      - paragraph: Published pokemon. Now I will delete comment x9wu88javflu5nljkr8dzj0g.
+    - group "Comment delete":
+      - strong: Comment delete
+      - text: Done
+      - term: id
+      - definition: x9wu88javflu5nljkr8dzj0g
+      - paragraph: Great article!
+      - group: Details
+    - article:
+      - text: Agent
+      - paragraph: All done. The article is published and the comment is gone.
+    - article:
+      - text: You
+      - paragraph: publish pokemon and delete comment h36nntzx4a8bs6fxrm32z19h
+    - group "Article publish":
+      - strong: Article publish
+      - text: Done
+      - term: id
+      - definition: pokemon
+      - paragraph: Pokémon turns 30 — how the fictional pocket monsters shaped science
+      - group: Details
+      - button "Undo Article publish": Undo
+    - article:
+      - text: Agent
+      - paragraph: Published pokemon. Now I will delete comment h36nntzx4a8bs6fxrm32z19h.
+    - group "Comment delete":
+      - strong: Comment delete
+      - text: Declined
+      - term: id
+      - definition: h36nntzx4a8bs6fxrm32z19h
+    - article:
+      - text: Agent
+      - paragraph: Understood. I left the comment alone.
+  - text: Message
+  - textbox "Message":
+    - /placeholder: Ask the agent…
+  - combobox "Model":
+    - option "Claude Opus 5.5"
+    - option "GPT-6.1 Sol" [selected]
+  - button "Send" [disabled]
+  - paragraph: Every action is logged. 199760 tokens left today.
+---
+ok   a11y: the panel is a labelled landmark
+ok   a11y: the header controls are buttons with names
+ok   a11y: the conversation is a log region
+ok   a11y: the field is labelled
+ok   a11y: every control in the panel has a name -- 0
+ok   no console or page errors in the whole wide run
+ok   no failed request on the blog in the whole wide run
+other failed requests (not the blog) ["https://www.minecraft.net/content/dam/minecraftnet/games/minecraft/key-art/MSpotlight_HEADER.jpg net::ERR_HTTP2_PROTOCOL_ERROR"]
+
+== narrow screen: 390 x 844
+ok   GET /articles/minecraft-is-15-years-old-and-still-changing-lives is 200 -- 200
+shot 00007-narrow-signed-out.png
+ok   the article has two comments to work with -- l1lje3k3guifv1cvc7fw8q8c,egequw238xmzto8kolyf0min
+ok   GET /articles/minecraft-is-15-years-old-and-still-changing-lives is 200 -- 200
+ok   narrow: the panel is a full-screen sheet -- 390x844
+ok   narrow: nothing in the panel scrolls sideways -- {"page":0,"panel":0}
+ok   narrow: every control is at least 32px tall -- []
+shot 00007-narrow-empty-with-context.png
+ok   fallback: the server answered once, not as a stream -- application/json
+ok   fallback: the same Done card appears
+shot 00007-narrow-reversible-done.png
+ok   narrow: a card waits for approval
+ok   narrow: still nothing scrolls sideways -- {"page":0,"panel":0}
+thread scroll area {"scroll":775,"client":573}
+shot 00007-narrow-waiting-approval.png
+ok   narrow: approved, the comment is deleted
+ok   narrow: the page behind was refreshed
+shot 00007-narrow-approved.png
+ok   narrow: declined, the comment is still there
+shot 00007-narrow-declined.png
+ok   narrow: undone, the article is back to draft
+shot 00007-narrow-undone.png
+
+-- a reply that arrives in pieces
+ok   streaming: while the person is at the end, the view stays at the end -- {"top":602,"height":1175,"away":0,"jump":false,"busy":false,"cards":5}
+ok   streaming: the message was sent once
+ok   streaming: more arrived after the person scrolled up -- 1175 -> 1255
+ok   streaming: the view did not move while they read -- 0 -> 0
+ok   streaming: a button offers the way back to the newest message -- {"top":0,"height":1255,"away":682,"jump":true,"busy":false,"cards":6}
+ok   streaming: it is a real button with a name
+ok   streaming: pressing it goes to the end and the button goes away -- {"top":682,"height":1255,"away":0,"jump":false,"busy":false,"cards":6}
+the reply was delivered in 90 pieces
+shot 00007-narrow-history.png
+ok   narrow: Close closes the sheet
+ok   no console or page errors in the whole narrow run
+ok   no failed request on the blog in the whole narrow run
+
+all checks passed

@@ -1,0 +1,12 @@
+ok   GET /articles/pokemon-turns-30-how-the-fictional-pocket-monsters-shaped-science is 200 -- 200
+ok   the unavailable state is shown -- The agent is unavailable |  | It is not set up here, or it cannot be reached right now. |  | Try again
+ok   it is announced as an alert
+ok   it says nothing about keys or providers
+shot 00007-wide-unavailable.png (clipped to 640x800 at 640,0)
+ok   Try again asks the server again
+ok   no page errors
+ok   no failed request on the blog beyond the expected 503
+ok   GET /articles/pokemon-turns-30-how-the-fictional-pocket-monsters-shaped-science is 200 -- 200
+shot 00007-narrow-unavailable.png
+
+all checks passed
