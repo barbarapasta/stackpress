@@ -393,6 +393,9 @@ describe('ai/sse', () => {
         data() {
           return null;
         },
+        post() {
+          return null;
+        },
         resource: makeAttachedRequest({
           method: 'GET',
           url: '/sse',
@@ -441,6 +444,9 @@ describe('ai/sse', () => {
         req: {
           body: payload,
           data() {
+            return payload;
+          },
+          post() {
             return payload;
           },
           resource: makeAttachedRequest({

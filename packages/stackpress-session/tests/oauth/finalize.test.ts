@@ -2,33 +2,44 @@ import { describe, it } from 'mocha';
 import { expect } from 'chai';
 import finalize from '../../src/oauth/events/finalize.js';
 
+function createResStub() {
+  const res: { results?: unknown, error?: unknown } = {};
+  return {
+    res: {
+      results: (data: unknown) => { res.results = data; },
+      setError: (data: unknown) => { res.error = data; }
+    },
+    state: res
+  };
+}
+
 describe('session/oauth/events/finalize', () => {
   it('should no-op when oauth was never registered', async () => {
     const ctx = { plugin: () => undefined };
-    await finalize({ ctx: ctx as never });
+    const { res, state } = createResStub();
+    await finalize({ ctx: ctx as never, res: res as never });
+    expect(state.results).to.deep.equal({ finalized: false });
   });
 
-  it('should call the registered service finalize()', async () => {
+  it('should call the registered service finalize() and report success', async () => {
     let called = false;
     const oauth = {
       finalize: async () => { called = true; }
     };
     const ctx = { plugin: () => oauth };
-    await finalize({ ctx: ctx as never });
+    const { res, state } = createResStub();
+    await finalize({ ctx: ctx as never, res: res as never });
     expect(called).to.equal(true);
+    expect(state.results).to.deep.equal({ finalized: true });
   });
 
-  it('should propagate a finalize() rejection', async () => {
+  it('should report a finalize() rejection as a response error, not a throw', async () => {
     const oauth = {
       finalize: async () => { throw new Error('not ready'); }
     };
     const ctx = { plugin: () => oauth };
-    let caught: unknown;
-    try {
-      await finalize({ ctx: ctx as never });
-    } catch (error) {
-      caught = error;
-    }
-    expect(caught).to.not.equal(undefined);
+    const { res, state } = createResStub();
+    await finalize({ ctx: ctx as never, res: res as never });
+    expect(state.error).to.not.equal(undefined);
   });
 });

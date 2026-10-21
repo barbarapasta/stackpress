@@ -427,6 +427,9 @@ describe('ai/http', () => {
           data() {
             return payload;
           },
+          post() {
+            return payload;
+          },
           resource: makeAttachedRequest({
             method: 'POST',
             url: '/mcp',
@@ -775,6 +778,9 @@ describe('ai/http', () => {
     await listener!({
       req: {
         data() {
+          return initialize;
+        },
+        post() {
           return initialize;
         },
         resource: makeAttachedRequest({

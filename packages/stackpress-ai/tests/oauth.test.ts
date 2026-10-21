@@ -37,9 +37,14 @@ describe('ai/oauth', () => {
     }]);
   });
 
-  it('should register the configured sse resource with the oauth service', () => {
+  it('should register the configured sse resource and its message route with the oauth service', () => {
     const ctx = createCtxStub({
       config: {
+        //the stub's config.path() only matches flat dotted keys (unlike the
+        // real Ingest CallableNest, which resolves nested paths); set the
+        // explicit route both ways so this test exercises the explicit
+        // value rather than coincidentally matching a fallback default.
+        'mcp.sse.route': '/sse',
         mcp: {
           sse: { route: '/sse', oauth: { resource: 'https://example.com/mcp' } }
         }
@@ -50,14 +55,29 @@ describe('ai/oauth', () => {
       registerMcpResource: (descriptor: unknown) => registered.push(descriptor)
     };
     registerOAuthResources(ctx as unknown as ToolResolverServer);
-    expect(registered).to.deep.equal([{
-      surface: 'sse',
-      route: '/sse',
-      resource: 'https://example.com/mcp'
-    }]);
+    expect(registered).to.deep.equal([
+      { surface: 'sse', route: '/sse', resource: 'https://example.com/mcp' },
+      { surface: 'sse', route: '/messages', resource: 'https://example.com/mcp' }
+    ]);
   });
 
-  it('should register both transports when both declare oauth', () => {
+  it('should default the sse handshake route to mcp.route, matching the real listener default', () => {
+    const ctx = createCtxStub({
+      config: {
+        mcp: { sse: { oauth: { resource: 'https://example.com/mcp' } } }
+      }
+    });
+    const registered: unknown[] = [];
+    ctx.registered.oauth = {
+      registerMcpResource: (descriptor: unknown) => registered.push(descriptor)
+    };
+    registerOAuthResources(ctx as unknown as ToolResolverServer);
+    expect(registered[0]).to.deep.equal({
+      surface: 'sse', route: '/mcp', resource: 'https://example.com/mcp'
+    });
+  });
+
+  it('should register both transports when both declare oauth, including the sse message route', () => {
     const ctx = createCtxStub({
       config: {
         mcp: {
@@ -71,7 +91,7 @@ describe('ai/oauth', () => {
       registerMcpResource: (descriptor: unknown) => registered.push(descriptor)
     };
     registerOAuthResources(ctx as unknown as ToolResolverServer);
-    expect(registered).to.have.length(2);
+    expect(registered).to.have.length(3);
   });
 
   it('should propagate a route-collision error raised by the oauth service', () => {

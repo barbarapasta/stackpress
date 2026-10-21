@@ -245,7 +245,15 @@ export default class AuthActions implements AuthActionsInterface {
     const rows = await insert;
     //if there are rows, then it's pgsql...
     if (rows.length > 0) {
-      return this.store.unserialize(rows[0]);
+      const unserialized = this.store.unserialize(rows[0]);
+      //AuthSchema.unserialize() does not decrypt token (it also round-trips
+      // plaintext caller input elsewhere), but rows[0] is a raw encrypted-at-
+      // rest DB row, so decrypt token here the same way findAll() already
+      // does for every other read path.
+      unserialized.token = this.store.columns.token.unserialize(
+        rows[0].token, true
+      ) as string;
+      return unserialized;
     }
     //must be mysql or sqlite...
     if (this.engine.connection.lastId) {

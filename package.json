@@ -42,5 +42,12 @@
     "test:server": "yarn server test",
     "test:schema": "yarn schema test",
     "test:sql": "yarn sql test"
+  },
+  "resolutions": {
+    "@stackpress/inquire": "file:/home/solution-team/projects/inquire/.handoff/stackpress-inquire-0.10.8-d41472e.tgz",
+    "@stackpress/inquire-mysql2": "file:/home/solution-team/projects/inquire/.handoff/stackpress-inquire-mysql2-0.10.8-d41472e.tgz",
+    "@stackpress/inquire-pg": "file:/home/solution-team/projects/inquire/.handoff/stackpress-inquire-pg-0.10.8-d41472e.tgz",
+    "@stackpress/inquire-pglite": "file:/home/solution-team/projects/inquire/.handoff/stackpress-inquire-pglite-0.10.8-d41472e.tgz",
+    "@stackpress/inquire-sqlite3": "file:/home/solution-team/projects/inquire/.handoff/stackpress-inquire-sqlite3-0.10.8-d41472e.tgz"
   }
 }

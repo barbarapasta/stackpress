@@ -306,6 +306,20 @@ export function withToolData(
     data.sessionId = auth.session.id;
   }
 
+  //events.md: "inject trusted profileId and oauth: { clientId, grantId,
+  // resource, scopes } after normal input mapping" - never the raw
+  // credential or its hash, and injected last so caller input cannot
+  // overwrite it (the reserved-field check runs before this point).
+  if (auth?.kind === 'oauth') {
+    data.profileId = auth.identity.profileId;
+    data.oauth = {
+      clientId: auth.identity.clientId,
+      grantId: auth.identity.grantId,
+      resource: auth.identity.resource,
+      scopes: auth.identity.scopes
+    };
+  }
+
   return data;
 }
 
@@ -328,8 +342,15 @@ export function toolAllowed(
       && secretAllowed(tool.method, auth.token.secret, auth.application.secret);
   }
 
-  //user tools only show up for sessions that own at least one required scope
+  //user tools only show up for sessions that own at least one required scope.
+  // events.md: "AI extends AuthContext with oauth kind...Its user tools can
+  // accept this variant" - an oauth identity reaches the exact same scope/
+  // credential-strength rule a legacy user session already enforces.
   if (tool.type === 'user') {
+    if (auth.kind === 'oauth') {
+      return hasRequiredScopes(auth.identity.scopes, tool.scopes)
+        && oauthCredentialAllowed(tool.method, auth.identity.credential);
+    }
     return auth.kind === 'user'
       && hasRequiredScopes(auth.session.scopes, tool.scopes)
       && secretAllowed(tool.method, auth.token.secret, auth.session.secret);
@@ -465,6 +486,18 @@ export function isRecord(value: unknown): value is Record<string, unknown> {
  */
 function hasRequiredScopes(owned: string[], required: string[]) {
   return required.length === 0 || owned.some(scope => required.includes(scope));
+}
+
+/**
+ * Check whether one oauth identity's read/full credential strength
+ * satisfies a tool's configured method (configuration.md: "GET alone
+ * permits read IDs; HEAD and other methods require a full key").
+ */
+function oauthCredentialAllowed(
+  method: string,
+  credential: 'read' | 'full'
+) {
+  return !requiresSecret(method) || credential === 'full';
 }
 
 /**

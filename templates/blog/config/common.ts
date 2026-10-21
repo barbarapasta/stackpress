@@ -16,6 +16,17 @@ export const seed = {
   session: process.env.SESSION_SEED || 'abc123'
 };
 
+//the port this server listens on (`server.port` below); overridable so a
+//preview/CI run can avoid a port already taken on a shared host
+export const port = Number(process.env.PORT) || 3000;
+
+//OAuth issuer/resource. `development: true` (set on `session.oauth` below)
+//allows these to stay `http://` because the host is a literal loopback
+//address; a real deployment must use `https://` and match its own public
+//host (see docs/oauth.md). Must match `server.host`/`server.port` below.
+export const issuer = `http://127.0.0.1:${port}`;
+export const oauthResource = `${issuer}/mcp`;
+
 //common config
 export const admin = {
   //name of the admin section. shown on the top left of the page
@@ -128,6 +139,45 @@ export const api = {
       type: 'session' as 'session',
       scopes: [ 'user' ],
       event: 'profile-detail',
+      data: {}
+    },
+    //Article Endpoint approved through native MCP OAuth (spec 00004).
+    //A `session`-type route is required for `oauth` opt-in; `type: 'app'`/
+    //`'public'` routes cannot enable user OAuth (configuration.md). Calling
+    //this route with an `oauth_`-prefixed bearer token (minted through
+    //`/auth/oauth2/authorize`) runs `oauth-token-verify` against the
+    //approved `articles.detail` operation instead of a legacy app/session
+    //key; an ordinary legacy key still works unchanged.
+    {
+      method: 'GET' as 'GET',
+      route: '/api/articles/:id',
+      type: 'session' as 'session',
+      //checked against the OAuth grant's approved scopes
+      //(`session.oauth.scopes` below), not the legacy `api.scopes` map
+      scopes: [ 'articles.read' ],
+      event: 'article-detail',
+      oauth: {
+        operation: 'articles.detail',
+        resources: [ oauthResource ]
+      },
+      data: {}
+    },
+    //Write counterpart (task 00012 follow-up): a non-GET method is a write
+    //operation under G-003's method-based classification, so this route
+    //requires the full `id:secret` key, never an ID-only read credential.
+    //Only a grant that approved `articles.write` and the `articles.update`
+    //operation may call it; approving `articles.detail`/`articles.read`
+    //alone does not.
+    {
+      method: 'PATCH' as 'PATCH',
+      route: '/api/articles/:id',
+      type: 'session' as 'session',
+      scopes: [ 'articles.write' ],
+      event: 'article-update',
+      oauth: {
+        operation: 'articles.update',
+        resources: [ oauthResource ]
+      },
       data: {}
     },
     //File Endpoints
@@ -472,6 +522,12 @@ export const mcp = {
   version: '1.0.0',
   route: '/mcp',
   mode: 'stateful' as 'stateful',
+  //enables native MCP OAuth (spec 00004) on this listener: a bearer token
+  //minted through `/auth/oauth2/authorize` is accepted for every `user`
+  //type tool below (`comment_create`) alongside the existing legacy
+  //session-key path; `app`/`public` type tools are unaffected (user OAuth
+  //only ever authenticates a `user` type tool - configuration.md).
+  oauth: { resource: oauthResource },
   tools: [
     {
       name: 'article_search',
@@ -531,14 +587,40 @@ export const mcp = {
       mode: 'plugin' as 'plugin',
       type: 'user' as 'user',
       event: 'comment-create-tool',
-      scopes: [ 'comments.write' ]
+      scopes: [ 'comments.write' ],
+      //The generated Comment tool schema requires `profileId` (a plain
+      //model foreign-key column), but a `type: 'user'` tool under native
+      //MCP OAuth injects the real caller's `profileId` from the verified
+      //grant and refuses a caller-supplied one as a reserved field
+      //(events.md). Left as the generated default, the SDK's own input
+      //validation and the OAuth reserved-field guard contradict each
+      //other and no OAuth client could ever call this tool successfully
+      //- found while task 00011 exercised this exact tool through a real
+      //OAuth grant. `mergePluginTool` replaces the whole `input` on
+      //override (not a deep merge), so this repeats the generated shape
+      //minus `profileId` rather than only removing one key.
+      input: {
+        type: 'object',
+        properties: {
+          id: { type: 'string', description: 'Unique generated identifier.' },
+          articleId: { type: 'string', description: 'Article this comment belongs to.' },
+          comment: { type: 'string', description: 'Detailed description of the category.' },
+          active: { type: 'boolean', description: 'Special flag to indicate active rows. Inactive rows are not shown in the list view, but can be viewed in the detail view.' },
+          created: { type: 'string', description: 'Generated timestamp when row was created.' },
+          updated: { type: 'string', description: 'Generated timestamp that is updated whenever the row has changed.' }
+        },
+        required: [ 'articleId' ]
+      }
     }
   ]
 };
 
 export const server = {
-  host: '127.0.0.1',
-  port: 3000,
+  //the OAuth issuer/resource above always use the literal `127.0.0.1`
+  //loopback address regardless of this bind host (configuration.md's
+  //`development` exception is scoped to a literal loopback/localhost URL)
+  host: process.env.HOST || '127.0.0.1',
+  port,
   cwd: cwd
 };
 
@@ -580,8 +662,62 @@ export const session = {
       { method: 'ALL', route: '/auth/signin/**' },
       { method: 'ALL', route: '/auth/signout' },
       { method: 'ALL', route: '/api/**' },
-      { method: 'ALL', route: '/mcp' }
+      { method: 'ALL', route: '/mcp' },
+      //OAuth (spec 00004). Native protocol routes (discovery/token/
+      //register/revoke) never need an entry here: the session request
+      //hook recognizes them (`OAuthService.isNativeRoute`) and skips this
+      //cookie-based check entirely, so a bearer-token client is never
+      //redirected to HTML sign-in. These two browser pages are not
+      //native; a signed-out visitor must still reach `GET /authorize` (it
+      //redirects to `/auth/signin?redirect_uri=...`, J03) and, to see the
+      //sign-in redirect on `/connections` instead of a bare 401 (J14).
+      { method: 'GET', route: '/auth/oauth2/authorize' },
+      { method: 'GET', route: '/auth/oauth2/connections' }
     ]
+  },
+  //Native MCP/API OAuth (spec 00004-mcp-native-oauth). See docs/oauth.md
+  //for the full setup guide; this mirrors configuration.md's small
+  //example. `development: true` permits the `http://` issuer/resource
+  //above because the host is a literal loopback address - a real
+  //deployment must set this `false` and use `https://`.
+  oauth: {
+    issuer,
+    development: true,
+    base: '/auth/oauth2',
+    //task 00012: test-only short lifetimes so automatic renewal can be
+    //checked promptly (sprint.md Stage 6); unset in production, where the
+    //configured 900s/604800s defaults apply.
+    ...(process.env.OAUTH_TEST_ACCESS_SECONDS ? {
+      accessSeconds: Number(process.env.OAUTH_TEST_ACCESS_SECONDS)
+    } : {}),
+    ...(process.env.OAUTH_TEST_RENEWAL_SECONDS ? {
+      renewalSeconds: Number(process.env.OAUTH_TEST_RENEWAL_SECONDS)
+    } : {}),
+    resources: [ {
+      resource: oauthResource,
+      name: 'Blog MCP/API service',
+      description: 'Article and comment tools, and the OAuth-protected article API',
+      scopes: [ 'articles.read', 'articles.write', 'comments.write' ]
+    } ],
+    scopes: {
+      'articles.read': {
+        name: 'Read articles',
+        description: 'Read article details through the API'
+      },
+      'articles.write': {
+        name: 'Change articles',
+        description: 'Create and update articles through MCP tools'
+      },
+      'comments.write': {
+        name: 'Write comments',
+        description: 'Create comments on your behalf through MCP tools'
+      }
+    },
+    //registered in plugins/app/oauth.ts
+    policy: {
+      approval: 'blog-oauth-approval',
+      access: 'blog-oauth-access'
+    }
   }
 };
 

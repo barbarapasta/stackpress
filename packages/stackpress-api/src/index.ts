@@ -16,6 +16,20 @@ export type {
   SessionInput
 } from './types.js';
 
-import StackpressApiException from './Exception.js';
+export type {
+  LegacyMcpKind,
+  LegacyMcpIdentity
+} from './legacy.js';
 
-export { StackpressApiException };
+export type {
+  LegacyMigrationKind,
+  LegacyMigrationInput,
+  LegacyMigrationRecordStatus,
+  LegacyMigrationRecordResult,
+  LegacyMigrationResult
+} from './migrate.js';
+
+import StackpressApiException from './Exception.js';
+import { verifyLegacyMcpKey } from './legacy.js';
+
+export { StackpressApiException, verifyLegacyMcpKey };

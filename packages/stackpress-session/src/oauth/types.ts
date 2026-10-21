@@ -216,7 +216,14 @@ export type OAuthAuthorizationStartInput = {
   code_challenge: string,
   code_challenge_method: string,
   resource?: string,
-  scope?: string
+  scope?: string,
+  //trusted browser continuation context (events.md): the HTTP page
+  //generates the unguessable continuation cookie value and passes only
+  //its hash here; the raw value never reaches this event or storage.
+  bindingHash: string,
+  //trusted rate-limit source address, same shape as every other
+  //`clients/rateLimit.ts` caller.
+  source: string
 };
 
 export type OAuthAuthorizationStartResult = {
@@ -315,6 +322,46 @@ export type OAuthCleanupResult = {
 };
 
 //--------------------------------------------------------------------//
+// Legacy Key Upgrade (storage.md "Upgrade Existing MCP Keys Explicitly")
+//
+// Not part of events.md's nine fixed protocol events - these are
+// task 00008's operator-only internal events between API's migration
+// adapter/hardened legacy validator and session's private store, so
+// `OAuthService.finalize()` does not require them (same treatment as
+// `oauth-cleanup`).
+
+export type OAuthLegacyKind = 'app' | 'session';
+
+export type OAuthLegacyBindInput = {
+  kind: OAuthLegacyKind,
+  //the legacy record's raw ID; session hashes it before storing, never
+  //API, so the domain-separated hash algorithm stays in one place
+  legacyId: string,
+  //the legacy record's own immutable creation reference; a deleted and
+  //recreated legacy ID (same ID, different incarnation) must not
+  //inherit the old binding
+  incarnation: string,
+  resource: string,
+  expires?: Date | null
+};
+
+export type OAuthLegacyBindResult = {
+  bound: boolean,
+  reason?: 'namespace_conflict' | 'incarnation_mismatch'
+};
+
+export type OAuthLegacyVerifyInput = {
+  kind: OAuthLegacyKind,
+  legacyId: string,
+  incarnation: string,
+  resource: string
+};
+
+export type OAuthLegacyVerifyResult = {
+  active: boolean
+};
+
+//--------------------------------------------------------------------//
 // Trusted Operation Registry
 
 //saved at API route registration; `route` is the configured template,
@@ -346,8 +393,21 @@ export type OAuthMcpResourceDescriptor = {
 export type OAuthService = {
   readonly config: NormalizedOAuthSessionConfig,
   readonly finalized: boolean,
+  //read access for the fixed library events (task 00005) that map a
+  //grant's stored operation fingerprints back to a safe, current
+  //operation ID for display and membership checking; not a mutation
+  //surface, so it carries none of registerApiOperation's validation.
+  readonly apiOperations: ReadonlyMap<string, {
+    descriptor: OAuthApiOperationDescriptor,
+    fingerprint: string
+  }>,
   registerApiOperation(descriptor: OAuthApiOperationDescriptor): void,
   registerMcpResource(descriptor: OAuthMcpResourceDescriptor): void,
+  //configuration.md: used by the global browser `session.access`
+  //authorizer to recognize exact registered protocol/API/MCP route
+  //capabilities so those handlers can enforce their own identity
+  //checks instead of requiring a browser cookie.
+  isNativeRoute(method: string, pathname: string): boolean,
   finalize(): Promise<void>,
   assertFinalized(): void
 };

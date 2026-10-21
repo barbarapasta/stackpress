@@ -42,6 +42,14 @@ export function unauthorized(res: Response) {
   );
 };
 
+export function badRequest(res: Response, message = 'Bad Request') {
+  res.setError(Exception
+    .for(message)
+    .withCode(400)
+    .toResponse()
+  );
+};
+
 export function validData(assert: Record<string, any>, data: Record<string, any>) {
   for (const [ key, value ] of Object.entries(assert)) {
     if (typeof data[key] === 'undefined') return false;

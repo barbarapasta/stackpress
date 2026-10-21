@@ -6,6 +6,7 @@ import type { OAuthPlugin } from '../../src/oauth/types.js';
 function createServerStub(session: Record<string, unknown> | undefined) {
   const handlers = new Map<string, Function[]>();
   const plugins: Record<string, unknown> = {};
+  const routes: Array<{ method: string, path: string }> = [];
   const stub = {
     config: {
       get(key: string) {
@@ -25,9 +26,14 @@ function createServerStub(session: Record<string, unknown> | undefined) {
     plugin(name: string) {
       return plugins[name];
     },
+    route(method: string, path: string) {
+      routes.push({ method, path });
+      return stub;
+    },
     listeners: {} as Record<string, Set<unknown>>,
     handlers,
-    plugins
+    plugins,
+    routes
   };
   return stub;
 }
@@ -94,5 +100,45 @@ describe('session/oauth/plugin', () => {
     expect(listenHandlers).to.have.length(1);
     listenHandlers[0]({ ctx });
     expect(ctx.handlers.get('oauth-finalize')).to.have.length(1);
+  });
+
+  it('should register every fixed event listener finalize() requires, on listen', () => {
+    const ctx = createServerStub(validOAuthConfig());
+    plugin(ctx as never);
+    (ctx.handlers.get('listen') || [])[0]({ ctx });
+    for (const event of [
+      'oauth-client-register', 'oauth-authorization-start', 'oauth-authorize',
+      'oauth-code-exchange', 'oauth-refresh', 'oauth-token-verify',
+      'oauth-revoke', 'oauth-grants-list', 'oauth-grant-revoke'
+    ]) {
+      expect(ctx.handlers.get(event), event).to.have.length(1);
+    }
+  });
+
+  it('should add the native discovery/token/register/revoke routes on route', async () => {
+    const ctx = createServerStub(validOAuthConfig());
+    plugin(ctx as never);
+    await (ctx.handlers.get('config') || [])[0]({ ctx });
+    (ctx.handlers.get('route') || [])[0]({ ctx });
+    const routeKeys = ctx.routes.map((r) => `${r.method} ${r.path}`);
+    expect(routeKeys).to.include('GET /.well-known/oauth-authorization-server');
+    expect(routeKeys).to.include('GET /.well-known/oauth-protected-resource/mcp');
+    //single configured resource: the root alias is also registered.
+    expect(routeKeys).to.include('GET /.well-known/oauth-protected-resource');
+    expect(routeKeys).to.include('POST /auth/oauth2/token');
+    expect(routeKeys).to.include('OPTIONS /auth/oauth2/token');
+    expect(routeKeys).to.include('POST /auth/oauth2/revoke');
+    expect(routeKeys).to.include('POST /auth/oauth2/register');
+  });
+
+  it('should not add the register route when registration is disabled', async () => {
+    const config = validOAuthConfig();
+    (config.oauth as Record<string, unknown>).registration = { enabled: false };
+    const ctx = createServerStub(config);
+    plugin(ctx as never);
+    await (ctx.handlers.get('config') || [])[0]({ ctx });
+    (ctx.handlers.get('route') || [])[0]({ ctx });
+    const routeKeys = ctx.routes.map((r) => `${r.method} ${r.path}`);
+    expect(routeKeys).to.not.include('POST /auth/oauth2/register');
   });
 });

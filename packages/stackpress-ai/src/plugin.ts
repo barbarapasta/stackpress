@@ -142,7 +142,19 @@ export function registerOAuthResources(ctx: Server) {
   if (config.sse?.oauth) {
     oauth.registerMcpResource({
       surface: 'sse',
-      route: ctx.config.path('mcp.sse.route', '/sse'),
+      route: ctx.config.path('mcp.sse.route', ctx.config.path('mcp.route', '/mcp')),
+      resource: config.sse.oauth.resource
+    });
+    //configuration.md: "Enabling both transports requires distinct GET
+    // handshake routes and an unambiguous SSE message POST route. Fail
+    // startup if they collide." The message endpoint is a second,
+    // separate route for the same SSE resource; registering it too lets
+    // OAuthService.registerMcpResource's per-route collision check catch
+    // a clash with the HTTP/SSE handshake route or another declared
+    // resource, not just the handshake route by itself.
+    oauth.registerMcpResource({
+      surface: 'sse',
+      route: ctx.config.path('mcp.messages', '/messages'),
       resource: config.sse.oauth.resource
     });
   }

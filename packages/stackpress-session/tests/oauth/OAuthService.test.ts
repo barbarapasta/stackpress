@@ -338,4 +338,84 @@ describe('session/oauth/OAuthService', () => {
       expect(service.finalized).to.equal(true);
     });
   });
+
+  describe('isNativeRoute', () => {
+    it('recognizes the issuer metadata well-known path', () => {
+      const service = new OAuthService(createServerStub(), baseConfig());
+      expect(service.isNativeRoute('GET', '/.well-known/oauth-authorization-server'))
+        .to.equal(true);
+    });
+
+    it('recognizes the single-resource root metadata alias and its own path', () => {
+      const service = new OAuthService(createServerStub(), baseConfig());
+      expect(service.isNativeRoute('GET', '/.well-known/oauth-protected-resource'))
+        .to.equal(true);
+      expect(service.isNativeRoute('GET', '/.well-known/oauth-protected-resource/mcp'))
+        .to.equal(true);
+    });
+
+    it('does not alias root metadata when more than one resource is configured', () => {
+      const config = normalizeOAuthConfig({
+        issuer: 'https://example.com',
+        resources: [
+          { resource: 'https://example.com/mcp', name: 'A', description: 'a', scopes: [ 'articles:read' ] },
+          { resource: 'https://example.com/other', name: 'B', description: 'b', scopes: [ 'articles:read' ] }
+        ],
+        scopes: { 'articles:read': { name: 'Read', description: 'Read' } },
+        policy: { approval: 'approval-event', access: 'access-event' }
+      });
+      const service = new OAuthService(createServerStub(), config);
+      expect(service.isNativeRoute('GET', '/.well-known/oauth-protected-resource'))
+        .to.equal(false);
+      expect(service.isNativeRoute('GET', '/.well-known/oauth-protected-resource/mcp'))
+        .to.equal(true);
+      expect(service.isNativeRoute('GET', '/.well-known/oauth-protected-resource/other'))
+        .to.equal(true);
+    });
+
+    it('recognizes the token/register/revoke protocol routes, GET and OPTIONS alike', () => {
+      const service = new OAuthService(createServerStub(), baseConfig());
+      expect(service.isNativeRoute('POST', '/auth/oauth2/token')).to.equal(true);
+      expect(service.isNativeRoute('OPTIONS', '/auth/oauth2/token')).to.equal(true);
+      expect(service.isNativeRoute('POST', '/auth/oauth2/register')).to.equal(true);
+      expect(service.isNativeRoute('POST', '/auth/oauth2/revoke')).to.equal(true);
+      expect(service.isNativeRoute('GET', '/auth/oauth2/token')).to.equal(false);
+    });
+
+    it('does not treat /authorize, /connections or /factor as native', () => {
+      const service = new OAuthService(createServerStub(), baseConfig());
+      expect(service.isNativeRoute('GET', '/auth/oauth2/authorize')).to.equal(false);
+      expect(service.isNativeRoute('POST', '/auth/oauth2/authorize')).to.equal(false);
+      expect(service.isNativeRoute('GET', '/auth/oauth2/connections')).to.equal(false);
+      expect(service.isNativeRoute('GET', '/auth/oauth2/factor')).to.equal(false);
+    });
+
+    it('recognizes a registered API operation by its exact method and route', () => {
+      const service = new OAuthService(createServerStub(), baseConfig());
+      service.registerApiOperation({
+        id: 'articles.detail', surface: 'api', method: 'GET',
+        route: '/api/articles/:id', event: 'article-detail',
+        resources: [ 'https://example.com/mcp' ], scopes: [], data: {}
+      });
+      expect(service.isNativeRoute('GET', '/api/articles/:id')).to.equal(true);
+      expect(service.isNativeRoute('POST', '/api/articles/:id')).to.equal(false);
+    });
+
+    it('recognizes a registered MCP resource route for GET/POST/DELETE/OPTIONS', () => {
+      const service = new OAuthService(createServerStub(), baseConfig());
+      service.registerMcpResource({
+        surface: 'mcp', route: '/mcp', resource: 'https://example.com/mcp'
+      });
+      expect(service.isNativeRoute('GET', '/mcp')).to.equal(true);
+      expect(service.isNativeRoute('POST', '/mcp')).to.equal(true);
+      expect(service.isNativeRoute('DELETE', '/mcp')).to.equal(true);
+      expect(service.isNativeRoute('OPTIONS', '/mcp')).to.equal(true);
+      expect(service.isNativeRoute('PUT', '/mcp')).to.equal(false);
+    });
+
+    it('rejects an unrelated route entirely', () => {
+      const service = new OAuthService(createServerStub(), baseConfig());
+      expect(service.isNativeRoute('GET', '/auth/account')).to.equal(false);
+    });
+  });
 });

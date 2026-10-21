@@ -28,6 +28,8 @@ project. Visit the [website](https://www.stackpress.io/) for guides.
  - [HTTP](./http.md)
  - [WHATWG](./whatwg.md)
  - [Session](./session.md)
+ - [OAuth Setup](./oauth.md)
+ - [OAuth Upgrade And Migration](./oauth-upgrade.md)
  - [Language](./language.md)
 
 ## Data And Generation APIs

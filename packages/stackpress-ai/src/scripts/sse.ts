@@ -4,6 +4,9 @@ import { createServer } from 'node:http';
 //modules
 import { SSEServerTransport } from '@modelcontextprotocol/sdk/server/sse.js';
 import type Server from '@stackpress/ingest/Server';
+import type { Method } from '@stackpress/lib/types';
+//stackpress-session
+import type { OAuthPlugin } from 'stackpress-session/types';
 //client
 import type {
   AuthContext,
@@ -18,6 +21,20 @@ import {
   resolveListAuth,
   sendText
 } from '../helpers.js';
+import {
+  buildAuthInfo,
+  createOAuthMcpServer,
+  GrantWatcherHandle,
+  identityIsFullCredential,
+  identityOwnerKey,
+  isOriginAllowed,
+  OAuthMcpRefusal,
+  requiresFullCredentialForMethod,
+  resolveMcpAuthContext,
+  watchGrantForChanges,
+  writeCorsPreflight,
+  writeOAuthRefusal
+} from '../oauth.js';
 
 const SSE_ATTACH_KEY = '__stackpress_ai_sse_attached__';
 const SSE_BODY_UNSET = Symbol('SSE_BODY_UNSET');
@@ -48,6 +65,14 @@ export function resolveSseConfig(ctx: Server) {
       )
     )
   };
+}
+
+/**
+ * configuration.md: "For older SSE at another URL, set mcp.sse.oauth:
+ * { resource } to that declared resource."
+ */
+export function resolveSseOAuthResource(ctx: Server): string | undefined {
+  return ctx.config.path<string | undefined>('mcp.sse.oauth.resource');
 }
 
 /**
@@ -86,6 +111,19 @@ export class McpSseServer {
   protected _service = createServer(this._handleRequest.bind(this));
   //this session map lets message requests route back to one live SSE session
   protected _sessions: Record<string, McpSseSession> = {};
+  //the Stackpress runtime these requests dispatch tool events through;
+  // only used by the OAuth-aware dispatch path below.
+  protected _ctx?: ToolResolverServer;
+  //configuration.md's declared resource for this SSE listener; undefined
+  // when `mcp.sse.oauth` is not configured, which keeps every existing
+  // non-OAuth behavior in this class completely unchanged.
+  protected _oauthResource?: string;
+  //the stable identity binding each SSE session was first verified
+  // against (recovery.md: "Bind anonymous sessions once to the first
+  // verified profile/client/grant/resource").
+  protected _owners: Record<string, string | undefined> = {};
+  //one background list-changed watcher per bound oauth session
+  protected _watchers: Record<string, GrantWatcherHandle> = {};
 
   /**
    * Store the transport configuration and prepare one shutdown callback.
@@ -97,7 +135,9 @@ export class McpSseServer {
     port: number,
     endpoint: string,
     messages: string,
-    promiser: Promiser<void>
+    promiser: Promiser<void>,
+    ctx?: ToolResolverServer,
+    oauthResource?: string
   ) {
     this._factory = factory;
     this._authResolver = authResolver;
@@ -106,6 +146,8 @@ export class McpSseServer {
     this._endpoint = endpoint;
     this._messages = messages;
     this._promiser = promiser;
+    this._ctx = ctx;
+    this._oauthResource = oauthResource;
     this.shutdown = async () => {
       if (this._exiting) return;
       this._exiting = true;
@@ -160,6 +202,10 @@ export class McpSseServer {
    * Close every live SSE session transport.
    */
   protected async _closeSessions() {
+    for (const watcher of Object.values(this._watchers)) {
+      watcher.stop();
+    }
+    this._watchers = {};
     await Promise.all(
       Object.values(this._sessions).map(session => session.transport.close())
     );
@@ -212,6 +258,14 @@ export class McpSseServer {
     res: ServerResponse,
     body: unknown = SSE_BODY_UNSET
   ) {
+    //an OAuth-enabled resource runs entirely through the identity-aware
+    // dispatcher below; every other configuration keeps its exact
+    // pre-existing behavior.
+    if (this._oauthResource) {
+      await this._dispatchOAuth(req, res, body);
+      return;
+    }
+
     try {
       //build one URL object so path matching works even on raw Node requests
       const url = new URL(
@@ -242,6 +296,171 @@ export class McpSseServer {
         res.end();
       }
     }
+  }
+
+  /**
+   * recovery.md's identity-aware legacy SSE dispatch: fresh verification
+   * on both the GET handshake and every message POST, control/full-key
+   * rules, session binding and the 401/403/404/503 reply table. Unlike
+   * Streamable HTTP, the GET stream is never closed at binding - older
+   * SSE keeps that stream as its only reply channel, and a protected
+   * result still requires a freshly verified POST (recovery.md: "Older
+   * SSE retains its existing reply channel; protected results require
+   * a fresh verified POST").
+   */
+  protected async _dispatchOAuth(
+    req: IncomingMessage,
+    res: ServerResponse,
+    body: unknown
+  ) {
+    const ctx = this._ctx as ToolResolverServer;
+    const resource = this._oauthResource as string;
+    let oauth: OAuthPlugin | undefined;
+
+    try {
+      const url = new URL(
+        req.url || '/',
+        `http://${req.headers.host || `${this._host}:${this._port}`}`
+      );
+      const isStream = req.method === 'GET' && url.pathname === this._endpoint;
+      const isMessage = req.method === 'POST' && url.pathname === this._messages;
+      const isPreflight = req.method === 'OPTIONS' &&
+        (url.pathname === this._endpoint || url.pathname === this._messages);
+
+      if (!isStream && !isMessage && !isPreflight) {
+        sendText(res, 404, 'Not Found');
+        return;
+      }
+
+      oauth = ctx.plugin<OAuthPlugin>('oauth');
+      if (!oauth) {
+        throw new OAuthMcpRefusal(503, 'service_unavailable', 'OAuth is not configured');
+      }
+      oauth.assertFinalized();
+
+      const origin = header(req, 'origin');
+      if (origin && !isOriginAllowed(origin, oauth.config)) {
+        throw new OAuthMcpRefusal(403, 'origin_not_allowed', 'Disallowed Origin');
+      }
+
+      if (isPreflight) {
+        writeCorsPreflight(res, origin, isStream ? 'GET, OPTIONS' : 'POST, OPTIONS');
+        return;
+      }
+
+      const authorization = header(req, 'authorization');
+      const auth = await resolveMcpAuthContext(
+        ctx, resource, (req.method || 'GET') as Method, authorization
+      );
+      (req as IncomingMessage & { auth?: unknown }).auth = buildAuthInfo(
+        auth || { kind: 'public' }
+      );
+      const owner = auth ? identityOwnerKey(auth) : undefined;
+      const full = identityIsFullCredential(auth || { kind: 'public' });
+
+      if (isStream) {
+        //legacy-candidate.mts: "the GET stream carries later messages;
+        // a supplied credential must prove full control even though
+        // tool reads may later use only an ID."
+        if (auth && !full) {
+          throw new OAuthMcpRefusal(401, 'invalid_token', 'A full access key is required for this operation');
+        }
+        await this._createOAuthSseConnection(res, auth, owner);
+        return;
+      }
+
+      const sessionId = url.searchParams.get('sessionId');
+      const session = sessionId ? this._sessions[sessionId] : undefined;
+      if (!sessionId || !session) {
+        throw new OAuthMcpRefusal(404, 'unknown_session', 'Unknown MCP session');
+      }
+
+      const bound = this._owners[sessionId];
+      if (bound && owner !== bound) {
+        throw new OAuthMcpRefusal(
+          auth ? 403 : 401,
+          'session_identity_mismatch',
+          'This session is bound to a different identity'
+        );
+      }
+
+      const payload = body === SSE_BODY_UNSET ? await readJsonBody(req) : body;
+      if (Array.isArray(payload)) {
+        throw new OAuthMcpRefusal(400, 'batch_not_supported', 'Batch requests are not supported');
+      }
+
+      const methodName = (payload as { method?: string } | undefined)?.method;
+      if (payload && requiresFullCredentialForMethod(methodName) && !full) {
+        throw new OAuthMcpRefusal(401, 'invalid_token', 'A full access key is required for this operation');
+      }
+
+      //bind once, then keep the person's/client's/approval's identity
+      // stable; the only GET reply channel for this session stays open.
+      if (!bound && owner && auth) {
+        this._owners[sessionId] = owner;
+        this._startWatcher(sessionId, session, auth);
+      }
+
+      await session.transport.handlePostMessage(req, res, payload);
+    } catch (error) {
+      writeOAuthRefusal(res, error, oauth?.config.issuer, resource);
+    }
+  }
+
+  /**
+   * Open one OAuth-aware SSE session, built from the full dynamic-identity
+   * registry rather than the factory/auth snapshot the non-OAuth path uses.
+   */
+  protected async _createOAuthSseConnection(
+    res: ServerResponse,
+    auth: AuthContext | undefined,
+    owner: string | undefined
+  ) {
+    const server = await createOAuthMcpServer(this._ctx as ToolResolverServer);
+    if (!server) {
+      throw new Error('Resolved MCP tool registry is empty.');
+    }
+
+    const transport = new SSEServerTransport(this._messages, res);
+    const sessionId = transport.sessionId;
+    const session: McpSseSession = {
+      auth: auth || { kind: 'public' }, server: server as unknown as McpServer, transport
+    };
+    this._sessions[sessionId] = session;
+    if (owner) {
+      this._owners[sessionId] = owner;
+      if (auth) this._startWatcher(sessionId, session, auth);
+    }
+
+    transport.onclose = async () => {
+      delete this._sessions[sessionId];
+      delete this._owners[sessionId];
+      this._watchers[sessionId]?.stop();
+      delete this._watchers[sessionId];
+    };
+
+    await server.connect(transport);
+  }
+
+  /**
+   * Start a bounded, advisory background poll that sends a generic
+   * `notifications/tools/list_changed` signal when the bound grant's
+   * safe summary changes (storage.md's grant-revision rule).
+   */
+  protected _startWatcher(
+    sessionId: string,
+    session: McpSseSession,
+    auth: AuthContext
+  ) {
+    if (this._watchers[sessionId] || auth.kind !== 'oauth') {
+      return;
+    }
+    this._watchers[sessionId] = watchGrantForChanges(
+      this._ctx as ToolResolverServer,
+      auth.identity.profileId,
+      auth.identity.grantId,
+      () => { void session.server.sendToolListChanged(); }
+    );
   }
 
   /**
@@ -282,12 +501,22 @@ export default async function sse(ctx: Server) {
 
   const factory = ctx.plugin<McpPlugin>('mcp');
   const { endpoint, host, messages, port } = resolveSseConfig(ctx);
+  const oauthResource = resolveSseOAuthResource(ctx);
   //build one connection-level auth resolver so each SSE session binds to
   // the bearer token presented on the initial event-stream request.
   const authResolver = async (req: IncomingMessage) => resolveListAuth(
     ctx as ToolResolverServer,
     header(req, 'authorization') || undefined
   );
+
+  //configuration.md: "AI standalone HTTP/SSE entrypoints call finalize
+  // before listening, after Terminal.bootstrap has run config/listen/
+  // route." An attached listener's app bootstrap owns that call instead
+  // (see attachSseToServer, which never calls finalize()).
+  const oauth = ctx.plugin<OAuthPlugin>('oauth');
+  if (oauth) {
+    await oauth.finalize();
+  }
 
   //then keep the event open until the underlying HTTP service closes
   return new Promise<void>(async (resolve, reject) => {
@@ -298,7 +527,9 @@ export default async function sse(ctx: Server) {
       port,
       endpoint,
       messages,
-      { resolve, reject }
+      { resolve, reject },
+      ctx as ToolResolverServer,
+      oauthResource
     );
 
     //finally start listening on the configured interface
@@ -311,6 +542,7 @@ export default async function sse(ctx: Server) {
  */
 export function attachSseToServer(ctx: Server) {
   const { endpoint, host, key, messages, port } = resolveSseConfig(ctx);
+  const oauthResource = resolveSseOAuthResource(ctx);
   //cast once so the configurable attach marker can live on the server context
   const attachable = ctx as Server & Record<string, unknown>;
 
@@ -331,7 +563,9 @@ export function attachSseToServer(ctx: Server) {
     port,
     endpoint,
     messages,
-    { resolve: () => undefined, reject: error => { throw error; } }
+    { resolve: () => undefined, reject: error => { throw error; } },
+    ctx as ToolResolverServer,
+    oauthResource
   );
 
   ctx.on('request', async ({ req, res }) => {
@@ -348,16 +582,20 @@ export function attachSseToServer(ctx: Server) {
       `http://${im.headers.host || `${host}:${port}`}`
     );
 
-    if (
-      (im.method !== 'GET' || url.pathname !== endpoint)
-      && (im.method !== 'POST' || url.pathname !== messages)
-    ) {
+    const matchesHandshake = url.pathname === endpoint &&
+      (im.method === 'GET' || (!!oauthResource && im.method === 'OPTIONS'));
+    const matchesMessages = url.pathname === messages &&
+      (im.method === 'POST' || (!!oauthResource && im.method === 'OPTIONS'));
+    if (!matchesHandshake && !matchesMessages) {
       return;
     }
 
-    //pass through the parsed Stackpress request data so attached POST
-    // message requests do not try to reread an already-consumed stream.
-    await transport.dispatch(im, sr, req.data());
+    //recovery.md: "All attached handlers pass body-only req.post() into the
+    // SDK; merged query data breaks strict JSON-RPC parsing." The existing
+    // attached SSE path merged req.data()'s query sessionId into the
+    // JSON-RPC body and failed strict schema validation; req.post() stays
+    // body-only while still reusing the already-parsed Stackpress request.
+    await transport.dispatch(im, sr, req.post());
     if (sr.headersSent) {
       res.stop();
       return false;

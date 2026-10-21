@@ -1,6 +1,6 @@
 import { describe, it } from 'mocha';
 import { expect } from 'chai';
-import { authorize, unauthorized, validData } from '../src/helpers.js';
+import { authorize, unauthorized, badRequest, validData } from '../src/helpers.js';
 import { createRequest, createResponse } from './mocks.js';
 
 describe('api/helpers authorize', () => {
@@ -56,6 +56,22 @@ describe('api/helpers authorize', () => {
     const result = authorize(req, res);
     expect(result).to.deep.equal({ token: 'id1:secret1', id: 'id1', secret: 'secret1' });
     expect(res.code).to.equal(0);
+  });
+});
+
+describe('api/helpers badRequest', () => {
+  it('sets a 400 error with the default message', () => {
+    const res = createResponse();
+    badRequest(res);
+    expect(res.code).to.equal(400);
+    expect(res.error).to.equal('Bad Request');
+  });
+
+  it('sets a 400 error with a custom message', () => {
+    const res = createResponse();
+    badRequest(res, 'Nope');
+    expect(res.code).to.equal(400);
+    expect(res.error).to.equal('Nope');
   });
 });
 

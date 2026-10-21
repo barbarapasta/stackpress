@@ -6,6 +6,9 @@ import { createServer } from 'node:http';
 import type Server from '@stackpress/ingest/Server';
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
 import { isInitializeRequest } from '@modelcontextprotocol/sdk/types.js';
+import type { Method } from '@stackpress/lib/types';
+//stackpress-session
+import type { OAuthPlugin } from 'stackpress-session/types';
 //client
 import type {
   AuthContext,
@@ -22,6 +25,20 @@ import {
   sendJson,
   sendText
 } from '../helpers.js';
+import {
+  buildAuthInfo,
+  createOAuthMcpServer,
+  GrantWatcherHandle,
+  identityIsFullCredential,
+  identityOwnerKey,
+  isOriginAllowed,
+  OAuthMcpRefusal,
+  requiresFullCredentialForMethod,
+  resolveMcpAuthContext,
+  watchGrantForChanges,
+  writeCorsPreflight,
+  writeOAuthRefusal
+} from '../oauth.js';
 
 const HTTP_ATTACH_KEY = '__stackpress_ai_http_attached__';
 const HTTP_BODY_UNSET = Symbol('HTTP_BODY_UNSET');
@@ -52,6 +69,16 @@ export function resolveHttpConfig(ctx: Server) {
       ctx.config.path('server.port', 3000)
     )
   };
+}
+
+/**
+ * configuration.md: `mcp.oauth` only ever carries a declared `resource`;
+ * everything else (issuer, scopes, the verification operation) resolves
+ * through the session service so an app cannot substitute a weaker
+ * verifier through this object.
+ */
+export function resolveHttpOAuthResource(ctx: Server): string | undefined {
+  return ctx.config.path<string | undefined>('mcp.oauth.resource');
 }
 
 /**
@@ -91,6 +118,22 @@ export class McpHttpServer {
   //this live session map lets stateful requests route back to the right
   // transport instance.
   protected _sessions: Record<string, McpHttpSession> = {};
+  //the Stackpress runtime these requests dispatch tool events through;
+  // only used by the OAuth-aware dispatch path below.
+  protected _ctx?: ToolResolverServer;
+  //configuration.md's declared resource for this listener; undefined when
+  // `mcp.oauth` is not configured, which keeps every existing non-OAuth
+  // behavior in this class completely unchanged.
+  protected _oauthResource?: string;
+  //the stable identity binding each saved session was first verified
+  // against (recovery.md: "Bind anonymous sessions once to the first
+  // verified profile/client/grant/resource").
+  protected _owners: Record<string, string | undefined> = {};
+  //one background list-changed watcher per bound oauth session
+  protected _watchers: Record<string, GrantWatcherHandle> = {};
+  //storage.md: "at most five seconds between polls" - a hard ceiling,
+  //not a fixed value; tests may request a shorter one.
+  protected _watchIntervalMs: number;
 
   /**
    * Store the transport configuration and prepare one shutdown callback.
@@ -102,7 +145,10 @@ export class McpHttpServer {
     port: number,
     endpoint: string,
     mode: McpSessionMode,
-    promiser: Promiser<void>
+    promiser: Promiser<void>,
+    ctx?: ToolResolverServer,
+    oauthResource?: string,
+    watchIntervalMs = 5000
   ) {
     this._factory = factory;
     this._authResolver = authResolver;
@@ -111,6 +157,9 @@ export class McpHttpServer {
     this._endpoint = endpoint;
     this._mode = mode;
     this._promiser = promiser;
+    this._ctx = ctx;
+    this._oauthResource = oauthResource;
+    this._watchIntervalMs = watchIntervalMs;
     this.shutdown = async () => {
       if (this._exiting) return;
       this._exiting = true;
@@ -165,6 +214,10 @@ export class McpHttpServer {
    * Close every live HTTP session transport.
    */
   protected async _closeSessions() {
+    for (const watcher of Object.values(this._watchers)) {
+      watcher.stop();
+    }
+    this._watchers = {};
     await Promise.all(
       Object.values(this._sessions).map(session => session.transport.close())
     );
@@ -207,11 +260,74 @@ export class McpHttpServer {
       const sessionId = transport.sessionId;
       if (sessionId) {
         delete this._sessions[sessionId];
+        delete this._owners[sessionId];
+        this._watchers[sessionId]?.stop();
+        delete this._watchers[sessionId];
       }
     };
 
     await server.connect(transport);
     return { auth, server, transport };
+  }
+
+  /**
+   * Build one MCP server whose tool handlers read identity per-call from
+   * `extra.authInfo` instead of a session-creation-time snapshot, for an
+   * OAuth-enabled resource (recovery.md: "recheck the authoritative
+   * grant/account immediately before invoking a protected event").
+   */
+  protected async _createOAuthServer(): Promise<McpServer> {
+    const server = await createOAuthMcpServer(this._ctx as ToolResolverServer);
+    if (!server) {
+      throw new Error('Resolved MCP tool registry is empty.');
+    }
+    return server as unknown as McpServer;
+  }
+
+  /**
+   * Create one dynamic-identity MCP session for an OAuth-enabled resource.
+   */
+  protected async _createOAuthSession(
+    auth: AuthContext | undefined
+  ): Promise<McpHttpSession> {
+    const server = await this._createOAuthServer();
+    let transport!: StreamableHTTPServerTransport;
+
+    const owner = auth && identityOwnerKey(auth);
+    transport = new StreamableHTTPServerTransport({
+      sessionIdGenerator: this._mode === 'stateless'
+        ? undefined
+        : () => randomUUID(),
+      //the session id is only assigned while the SDK processes this very
+      //initialize call, not when the transport is constructed - bind the
+      //owner (and start its watcher) here, the first point it is known,
+      //rather than trying to read transport.sessionId immediately after
+      //this method returns (recovery.md: "Bind anonymous sessions once to
+      //the first verified profile/client/grant/resource").
+      onsessioninitialized: sessionId => {
+        const session: McpHttpSession = {
+          auth: auth || { kind: 'public' }, server, transport
+        };
+        this._sessions[sessionId] = session;
+        if (owner) {
+          this._owners[sessionId] = owner;
+          this._startWatcher(sessionId, session, auth as AuthContext);
+        }
+      }
+    });
+
+    transport.onclose = async () => {
+      const sessionId = transport.sessionId;
+      if (sessionId) {
+        delete this._sessions[sessionId];
+        delete this._owners[sessionId];
+        this._watchers[sessionId]?.stop();
+        delete this._watchers[sessionId];
+      }
+    };
+
+    await server.connect(transport);
+    return { auth: auth || { kind: 'public' }, server, transport };
   }
 
   /**
@@ -222,6 +338,14 @@ export class McpHttpServer {
     res: ServerResponse,
     body: unknown = HTTP_BODY_UNSET
   ) {
+    //an OAuth-enabled resource runs entirely through the identity-aware
+    // dispatcher below; every other configuration keeps its exact
+    // pre-existing behavior.
+    if (this._oauthResource) {
+      await this._dispatchOAuth(req, res, body);
+      return;
+    }
+
     try {
       //build one URL object so path matching works even on raw Node requests
       const url = new URL(
@@ -266,6 +390,155 @@ export class McpHttpServer {
         res.end();
       }
     }
+  }
+
+  /**
+   * recovery.md's full identity-aware HTTP dispatch for an OAuth-enabled
+   * resource: Origin checks, the saved/per-request method rules, fresh
+   * per-request verification carried through `req.auth`, control/DELETE
+   * credential strength, session binding, and the 401/403/404/405/503
+   * reply table.
+   */
+  protected async _dispatchOAuth(
+    req: IncomingMessage,
+    res: ServerResponse,
+    body: unknown
+  ) {
+    const ctx = this._ctx as ToolResolverServer;
+    const resource = this._oauthResource as string;
+    let oauth: OAuthPlugin | undefined;
+
+    try {
+      oauth = ctx.plugin<OAuthPlugin>('oauth');
+      if (!oauth) {
+        throw new OAuthMcpRefusal(503, 'service_unavailable', 'OAuth is not configured');
+      }
+      //configuration.md: "All OAuth handlers refuse requests with 503
+      // until it succeeds" - assertFinalized() throws its own 503.
+      oauth.assertFinalized();
+
+      const origin = header(req, 'origin');
+      if (origin && !isOriginAllowed(origin, oauth.config)) {
+        throw new OAuthMcpRefusal(403, 'origin_not_allowed', 'Disallowed Origin');
+      }
+
+      if (req.method === 'OPTIONS') {
+        writeCorsPreflight(
+          res, origin,
+          this._mode === 'stateless' ? 'POST, OPTIONS' : 'GET, POST, DELETE, OPTIONS'
+        );
+        return;
+      }
+
+      if (this._mode === 'stateless' && req.method !== 'POST' && req.method !== 'OPTIONS') {
+        res.writeHead(405, { Allow: 'POST' }).end();
+        return;
+      }
+
+      const authorization = header(req, 'authorization');
+      const auth = await resolveMcpAuthContext(
+        ctx, resource, (req.method || 'GET') as Method, authorization
+      );
+      (req as IncomingMessage & { auth?: unknown }).auth = buildAuthInfo(
+        auth || { kind: 'public' }
+      );
+
+      const payload = req.method === 'POST'
+        ? (body === HTTP_BODY_UNSET ? await readJsonBody(req) : body)
+        : undefined;
+      if (Array.isArray(payload)) {
+        throw new OAuthMcpRefusal(400, 'batch_not_supported', 'Batch requests are not supported');
+      }
+
+      const sessionId = header(req, 'mcp-session-id');
+      const session = sessionId ? this._sessions[sessionId] : undefined;
+      if (sessionId && !session) {
+        throw new OAuthMcpRefusal(404, 'unknown_session', 'Unknown MCP session');
+      }
+
+      const owner = auth ? identityOwnerKey(auth) : undefined;
+      if (session && sessionId) {
+        const bound = this._owners[sessionId];
+        if (bound && owner !== bound) {
+          throw new OAuthMcpRefusal(
+            auth ? 403 : 401,
+            'session_identity_mismatch',
+            'This session is bound to a different identity'
+          );
+        }
+      }
+
+      const methodName = (payload as { method?: string } | undefined)?.method;
+      const full = identityIsFullCredential(auth || { kind: 'public' });
+      if (payload && requiresFullCredentialForMethod(methodName) && !full) {
+        throw new OAuthMcpRefusal(401, 'invalid_token', 'A full access key is required for this operation');
+      }
+      if (req.method === 'DELETE' && !full) {
+        throw new OAuthMcpRefusal(401, 'invalid_token', 'A full access key is required to end this session');
+      }
+      if (req.method === 'GET' && auth && !full) {
+        throw new OAuthMcpRefusal(401, 'invalid_token', 'A full access key is required for this operation');
+      }
+
+      //a first verified identity binds an anonymous saved session once
+      // (recovery.md), then closes the pre-auth notification stream.
+      if (session && sessionId && !this._owners[sessionId] && owner && auth) {
+        this._owners[sessionId] = owner;
+        session.transport.closeStandaloneSSEStream?.();
+        this._startWatcher(sessionId, session, auth);
+      }
+
+      let activeSession = session;
+      if (!activeSession) {
+        if (this._mode === 'stateful' && !(payload && isInitializeRequest(payload))) {
+          sendJson(res, 400, {
+            jsonrpc: '2.0',
+            error: { code: -32000, message: 'Bad Request: No valid session ID provided' },
+            id: null
+          });
+          return;
+        }
+        //owner binding (and starting its watcher) for a brand-new
+        //session happens inside _createOAuthSession's own
+        //onsessioninitialized callback, the first point a stateful
+        //session's id actually exists; stateless mode has no session id
+        //to bind at all.
+        activeSession = await this._createOAuthSession(auth);
+      }
+
+      if (this._mode === 'stateless') {
+        const transient = activeSession;
+        res.on('close', () => { void transient.transport.close(); });
+      }
+
+      await activeSession.transport.handleRequest(req, res, payload);
+    } catch (error) {
+      writeOAuthRefusal(res, error, oauth?.config.issuer, resource);
+    }
+  }
+
+  /**
+   * Start a bounded, advisory background poll that sends a generic
+   * `notifications/tools/list_changed` signal when the bound grant's
+   * safe summary changes (storage.md's grant-revision rule). Never
+   * grants anything by itself; the next real call still runs the full
+   * verifier.
+   */
+  protected _startWatcher(
+    sessionId: string,
+    session: McpHttpSession,
+    auth: AuthContext
+  ) {
+    if (this._watchers[sessionId] || auth.kind !== 'oauth') {
+      return;
+    }
+    this._watchers[sessionId] = watchGrantForChanges(
+      this._ctx as ToolResolverServer,
+      auth.identity.profileId,
+      auth.identity.grantId,
+      () => { void session.server.sendToolListChanged(); },
+      this._watchIntervalMs
+    );
   }
 
   /**
@@ -350,12 +623,24 @@ export default async function http(ctx: Server) {
 
   const factory = ctx.plugin<McpPlugin>('mcp');
   const { endpoint, host, mode, port } = resolveHttpConfig(ctx);
+  const oauthResource = resolveHttpOAuthResource(ctx);
   //build one per-request auth resolver so both stateless calls and new
   // stateful sessions use the same bearer parsing behavior.
   const authResolver = async (req: IncomingMessage) => resolveListAuth(
     ctx as ToolResolverServer,
     header(req, 'authorization') || undefined
   );
+
+  //configuration.md: "AI standalone HTTP/SSE entrypoints call finalize
+  // before listening, after Terminal.bootstrap has run config/listen/
+  // route." A standalone listener has no outer app bootstrap to do this
+  // for it, so it must call it itself; an attached listener's app
+  // bootstrap owns that call instead (see attachHttpToServer, which never
+  // calls finalize()).
+  const oauth = ctx.plugin<OAuthPlugin>('oauth');
+  if (oauth) {
+    await oauth.finalize();
+  }
 
   //then keep the event open until the underlying HTTP service closes
   return new Promise<void>(async (resolve, reject) => {
@@ -366,7 +651,9 @@ export default async function http(ctx: Server) {
       port,
       endpoint,
       mode,
-      { resolve, reject }
+      { resolve, reject },
+      ctx as ToolResolverServer,
+      oauthResource
     );
 
     //finally start listening on the configured interface
@@ -388,6 +675,7 @@ export function attachHttpToServer(ctx: Server) {
   attachable[HTTP_ATTACH_KEY] = true;
   const factory = ctx.plugin<McpPlugin>('mcp');
   const { endpoint, host, mode, port } = resolveHttpConfig(ctx);
+  const oauthResource = resolveHttpOAuthResource(ctx);
   const authResolver = async (req: IncomingMessage) => resolveListAuth(
     ctx as ToolResolverServer,
     header(req, 'authorization') || undefined
@@ -399,7 +687,9 @@ export function attachHttpToServer(ctx: Server) {
     port,
     endpoint,
     mode,
-    { resolve: () => undefined, reject: error => { throw error; } }
+    { resolve: () => undefined, reject: error => { throw error; } },
+    ctx as ToolResolverServer,
+    oauthResource
   );
 
   ctx.on('request', async ({ req, res }) => {
@@ -416,13 +706,15 @@ export function attachHttpToServer(ctx: Server) {
       `http://${im.headers.host || `${host}:${port}`}`
     );
 
-    if (im.method !== 'POST' || url.pathname !== endpoint) {
+    const methodMatches = im.method === 'POST' ||
+      (!!oauthResource && (im.method === 'GET' || im.method === 'DELETE' || im.method === 'OPTIONS'));
+    if (!methodMatches || url.pathname !== endpoint) {
       return;
     }
 
-    //pass through the parsed Stackpress request data so initialize works even
-    // after the main server has already consumed the raw stream.
-    await transport.dispatch(im, sr, req.data());
+    //recovery.md: "All attached handlers pass body-only req.post() into
+    // the SDK" - see the call site below.
+    await transport.dispatch(im, sr, req.post());
     if (sr.headersSent) {
       res.stop();
       return false;
@@ -437,3 +729,4 @@ function header(req: IncomingMessage, name: string) {
   const value = req.headers[name.toLowerCase()];
   return Array.isArray(value) ? value[0] : value ?? null;
 }
+

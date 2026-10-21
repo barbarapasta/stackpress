@@ -2,6 +2,7 @@
 import type Server from '@stackpress/ingest/Server';
 //stackpress-session
 import StackpressSessionException from '../Exception.js';
+import { issuerMetadataPath, resourceMetadataPath, ROOT_RESOURCE_METADATA_PATH } from './metadata.js';
 import type {
   NormalizedOAuthSessionConfig,
   OAuthApiOperationDescriptor,
@@ -178,6 +179,53 @@ export default class OAuthService implements IOAuthService {
       ).withCode(500);
     }
     this._mcpResources.set(descriptor.route, descriptor);
+  }
+
+  /**
+   * configuration.md: "The global browser session.access authorizer
+   * must recognize exact registered protocol/API/MCP route
+   * capabilities, allowing those handlers to enforce their own
+   * identity checks. No broad /auth/* bypass." This is an exact-match
+   * allowlist of native (non-cookie) capabilities only: the discovery/
+   * token/register/revoke protocol routes, plus every registered API
+   * operation and MCP resource route. It deliberately excludes
+   * /authorize, /connections and /factor - those remain ordinary
+   * browser pages that still require the signed-in session/CSRF
+   * checks task 00007 wires up.
+   */
+  isNativeRoute(method: string, pathname: string): boolean {
+    const base = this._config.base;
+    const protocol: Array<{ method: string, route: string }> = [
+      { method: 'GET', route: issuerMetadataPath(this._config.issuer) },
+      { method: 'POST', route: `${base}/token` },
+      { method: 'POST', route: `${base}/register` },
+      { method: 'POST', route: `${base}/revoke` },
+      { method: 'OPTIONS', route: `${base}/token` },
+      { method: 'OPTIONS', route: `${base}/register` },
+      { method: 'OPTIONS', route: `${base}/revoke` }
+    ];
+    for (const resource of this._config.resources) {
+      protocol.push({ method: 'GET', route: resourceMetadataPath(resource.resource) });
+    }
+    if (this._config.resources.length === 1) {
+      protocol.push({ method: 'GET', route: ROOT_RESOURCE_METADATA_PATH });
+    }
+    if (protocol.some((entry) => entry.method === method && entry.route === pathname)) {
+      return true;
+    }
+    for (const entry of this._apiOperations.values()) {
+      if (entry.descriptor.method === method && entry.descriptor.route === pathname) {
+        return true;
+      }
+    }
+    for (const entry of this._mcpResources.values()) {
+      if (entry.route === pathname &&
+        (method === 'GET' || method === 'POST' || method === 'DELETE' || method === 'OPTIONS')
+      ) {
+        return true;
+      }
+    }
+    return false;
   }
 
   assertFinalized() {
