@@ -134,6 +134,47 @@ not replace rendered accessibility and interaction verification.
 - generated definitions and configured exposure can drift;
 - audit identity and tracing are not automatically centralized.
 
+## Accepted Native MCP OAuth Direction
+
+Accepted at spec 00005 Freeze on 2026-09-29; implementation is not yet complete.
+These are future implementation constraints, not claims about released behavior.
+The current API OAuth ownership described above remains unchanged.
+
+- Session will own separate OAuth client/approval/key records and common checks.
+  AI will enforce MCP access; API will accept new keys only on explicitly enabled
+  user routes. Session must not depend on AI/API. AI remains an explicit plugin.
+- One approval may cover the exact declared MCP service and explicitly saved API
+  operations. Sharing a hostname or permission name does not add API membership.
+  New or changed operations need new approval; renewal cannot expand access.
+- Preserve ID-only reads and full id:secret for other operations. For MCP, use
+  the configured tool method. Treat new read IDs as secret credentials, store
+  hashes, rotate both parts and never downgrade a supplied wrong secret.
+- Any one matching configured permission is enough. Empty lists still reject
+  protected API requests and allow valid correct-type protected MCP callers.
+- Public/protected MCP tools share an address. Anonymous clients may see protected
+  names/descriptions, not private schemas or results. Each protected call needs
+  fresh checks; a connection ID or browser cookie is not an MCP credential.
+- Default new access lifetime is 15 minutes and renewal ends 7 days after original
+  approval; both are configurable. Renewal cannot move the final deadline.
+  Disconnect, expiry and inactive accounts end access on both surfaces.
+- Apps define approval/access rules and when a fresh factor check is needed.
+  Compatible clients may request approval unless an explicit allowed-client list
+  restricts them. Registration or a declared client name proves no user consent.
+- When OAuth is enabled on existing MCP services, selected old keys need explicit
+  service bindings and complete current-key checks. Ordinary legacy API behavior
+  and reply formats remain unchanged. There is no automatic first-use binding.
+- First release requires Node 22 and PGlite/PostgreSQL/MySQL/SQLite. Proofs exposed
+  shared Inquire connection-ownership failures; production storage requires their
+  correction. Do not claim unmodified adapters pass those concurrency checks.
+- Automatic extra-permission approval is not promised. Explicit reapproval and
+  reconnection are the accepted recovery path; writes with an unknown outcome
+  must not be automatically repeated. Full production/client checks remain due.
+
+Source: user-approved [Freeze record](../specs/00005-mcp-native-oauth/freeze.md).
+Load the spec for exact field contracts and evidence, not to infer shipped support.
+Future specs should inherit the stable rules here rather than treating prototype
+output or a sibling spec as current runtime guarantees.
+
 ## Detailed Reference
 
 Load [Runtime API Contracts](../references/00004-runtime-api-contracts.md) when

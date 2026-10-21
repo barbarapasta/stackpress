@@ -1,0 +1,91 @@
+{
+  "packages": {
+    "@stackpress/inquire": "0.10.8",
+    "@stackpress/inquire-pglite": "0.10.8",
+    "@stackpress/inquire-pg": "0.10.8",
+    "@stackpress/inquire-mysql2": "0.10.8",
+    "@stackpress/inquire-sqlite3": "0.10.8",
+    "@electric-sql/pglite": "0.3.14",
+    "pg": "8.16.3",
+    "mysql2": "3.15.3",
+    "better-sqlite3": "12.4.1"
+  },
+  "inspectedImplementation": [
+    {
+      "path": "@stackpress/inquire/esm/Engine.js",
+      "sha256": "839791bfecfd0dd880eb9bd06690f29d61fdbfe3a0c36a47d18a7a04bed04870"
+    },
+    {
+      "path": "@stackpress/inquire/esm/types.d.ts",
+      "sha256": "215e2ac51aa2c55952e72ab2adb5677c641b9647a6cac5e42474ebcaf24fbbe3"
+    },
+    {
+      "path": "@stackpress/inquire/esm/index.js",
+      "sha256": "ca04e69f92653351d08f9effc89f8d398d8463eae7097bd933e307080a027d31"
+    },
+    {
+      "path": "@stackpress/inquire-pglite/esm/Connection.js",
+      "sha256": "d5562b16cfd1f0e1d3d3a0482955ca9dd4313dc46e4dae9c45144ad0a6c6604f"
+    },
+    {
+      "path": "@stackpress/inquire-pglite/esm/helpers.js",
+      "sha256": "7a1b1fb5376ee32d229c169796c277f19687d7e8d46b63f7cfe9a58571eb2179"
+    },
+    {
+      "path": "@stackpress/inquire-pglite/esm/types.d.ts",
+      "sha256": "5df67597db0a1f382eca695c94e6e0c268a0c8e8e491f24515123f8da40996c8"
+    },
+    {
+      "path": "@stackpress/inquire-pglite/esm/index.js",
+      "sha256": "c07f804976065a2b10ac0dc43195b915bb6a21685cd39b8929ce74282201cdce"
+    },
+    {
+      "path": "@stackpress/inquire-pg/esm/Connection.js",
+      "sha256": "e4ff727a5e759789383f47741cb8520017b8d7a50c40b6af3ed89729edf041b4"
+    },
+    {
+      "path": "@stackpress/inquire-pg/esm/helpers.js",
+      "sha256": "7a1b1fb5376ee32d229c169796c277f19687d7e8d46b63f7cfe9a58571eb2179"
+    },
+    {
+      "path": "@stackpress/inquire-pg/esm/types.d.ts",
+      "sha256": "54439d73b7fb3e50a7b163e96d9026c9c7bfb7b9a81c4005aa6534a36b88563e"
+    },
+    {
+      "path": "@stackpress/inquire-pg/esm/index.js",
+      "sha256": "20baa46159a0807ea544c5ec18b4e826bf111f5072ae3228128f9297d2183a3b"
+    },
+    {
+      "path": "@stackpress/inquire-mysql2/esm/Connection.js",
+      "sha256": "756841f6c16bee6de5b56ee422d2c805777044a3fe6760e9efe31aa72a3f126d"
+    },
+    {
+      "path": "@stackpress/inquire-mysql2/esm/helpers.js",
+      "sha256": "7a1b1fb5376ee32d229c169796c277f19687d7e8d46b63f7cfe9a58571eb2179"
+    },
+    {
+      "path": "@stackpress/inquire-mysql2/esm/types.d.ts",
+      "sha256": "942c9b7cf60fdc4e6646824813b0d3e4702ff9b99a6d8736219c450a3cd01ac5"
+    },
+    {
+      "path": "@stackpress/inquire-mysql2/esm/index.js",
+      "sha256": "0e8e5635d52ae83aba066e5643985a610cb198236d56780df9ecf85c076beecc"
+    },
+    {
+      "path": "@stackpress/inquire-sqlite3/esm/Connection.js",
+      "sha256": "d3c0f1a04c894856a7b83edb4ace3858c3dbe24ff03837098a552bcb35edc65e"
+    },
+    {
+      "path": "@stackpress/inquire-sqlite3/esm/helpers.js",
+      "sha256": "7a1b1fb5376ee32d229c169796c277f19687d7e8d46b63f7cfe9a58571eb2179"
+    },
+    {
+      "path": "@stackpress/inquire-sqlite3/esm/types.d.ts",
+      "sha256": "a59f73c8ad15eccf3a34ad7f07b1fadfbade3b2a44e66178ea7ee9d701607f3c"
+    },
+    {
+      "path": "@stackpress/inquire-sqlite3/esm/index.js",
+      "sha256": "18b129874b79933119013128212d73d6224d11d0225560043561556be4f82015"
+    }
+  ]
+}

@@ -2,6 +2,10 @@
 import { expect } from 'chai';
 import { describe, it } from 'mocha';
 //client
+import httpEvent, * as httpEventModule from '../src/events/http.js';
+import sseEvent, * as sseEventModule from '../src/events/sse.js';
+import stdioEvent from '../src/events/stdio.js';
+import * as events from '../src/events/index.js';
 import { http, sse, stdio } from '../src/events/index.js';
 import { createCtxStub } from './helpers.js';
 
@@ -9,6 +13,13 @@ import { createCtxStub } from './helpers.js';
 type ResStub = { code?: number };
 
 describe('ai/events', () => {
+  it('should re-export the three transport event handlers from the barrel', () => {
+    expect(events.http).to.equal(httpEventModule.default);
+    expect(events.sse).to.equal(sseEventModule.default);
+    expect(events.stdio).to.be.a('function');
+    expect(events.stdio).to.equal(stdioEvent);
+  });
+
   it('should attach the http transport and mark the response ok', async () => {
     const ctx = createCtxStub();
     ctx.register('mcp', async () => null);
@@ -18,6 +29,16 @@ describe('ai/events', () => {
 
     //with no mcp port set the transport rides on the main server request hook
     expect(ctx.events).to.include('request');
+    expect(res.code).to.equal(200);
+  });
+
+  it('should start the http transport and mark the response ok', async () => {
+    const res: ResStub = {};
+    //default host/port config makes shouldAttachHttpToServer true, so this
+    // resolves immediately through the attach path instead of listening.
+    const ctx = createCtxStub({ config: { mcp: {} } });
+    await httpEvent({ ctx, res } as never);
+
     expect(res.code).to.equal(200);
   });
 
@@ -32,6 +53,14 @@ describe('ai/events', () => {
     expect(res.code).to.equal(200);
   });
 
+  it('should start the sse transport and mark the response ok', async () => {
+    const res: ResStub = {};
+    const ctx = createCtxStub({ config: { mcp: {} } });
+    await sseEvent({ ctx, res } as never);
+
+    expect(res.code).to.equal(200);
+  });
+
   it('should stop when another listener already failed', async () => {
     const ctx = createCtxStub({ config: { 'mcp.tools': [] } });
 
@@ -41,6 +70,16 @@ describe('ai/events', () => {
       expect(res.code).to.equal(500);
     }
     expect(ctx.events).to.deep.equal([]);
+  });
+
+  it('should skip each transport before touching the context when a prior listener failed', async () => {
+    for (const event of [ httpEvent, sseEvent, stdioEvent ]) {
+      const res: ResStub = { code: 500 };
+      //passing a broken ctx would throw if the guard did not stop the script
+      // before it ever touches config, proving the early return actually ran.
+      await event({ ctx: undefined, res } as never);
+      expect(res.code).to.equal(500);
+    }
   });
 
   it('should surface an empty registry from the stdio event', async () => {

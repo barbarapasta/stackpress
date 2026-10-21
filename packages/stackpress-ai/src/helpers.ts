@@ -23,7 +23,12 @@ type SupportedMethod = typeof METHODS[number];
 
 //these fields tell a tool event who is calling, so tool input may not carry
 // them.
-const IDENTITY_FIELDS = [ 'profileId', 'applicationId', 'sessionId' ] as const;
+const IDENTITY_FIELDS = [
+  'profileId',
+  'applicationId',
+  'sessionId',
+  'oauth'
+] as const;
 
 //--------------------------------------------------------------------//
 // Functions
@@ -360,6 +365,15 @@ export function withToolData(
     data.sessionId = caller.sessionId;
   }
 
+  //an OAuth grant acts for one person. The event is told that person and
+  // the grant that approved the call (client, grant, resource and scopes),
+  // never the credential itself. It is written last so input cannot
+  // overwrite it.
+  if (caller?.kind === 'oauth') {
+    data.profileId = caller.profileId;
+    data.oauth = caller.oauth ? { ...caller.oauth } : undefined;
+  }
+
   return data;
 }
 
@@ -390,6 +404,21 @@ export function callerFromAuth(auth?: AuthContext): Caller | null {
     };
   }
 
+  //an OAuth identity is one person acting through an approved grant
+  if (auth.kind === 'oauth') {
+    return {
+      kind: 'oauth',
+      profileId: auth.identity.profileId,
+      scopes: [ ...auth.identity.scopes ],
+      oauth: {
+        clientId: auth.identity.clientId,
+        grantId: auth.identity.grantId,
+        resource: auth.identity.resource,
+        scopes: [ ...auth.identity.scopes ]
+      }
+    };
+  }
+
   return null;
 }
 
@@ -417,8 +446,15 @@ export function toolAllowed(
       && secretAllowed(auth.token.secret, auth.application.secret);
   }
 
-  //user tools only show up for sessions that own every required scope
+  //user tools only show up for sessions that own every required scope. An
+  // OAuth identity is a user too, under the OAuth spec's accepted rules: any
+  // one matching scope is enough (Q-004), an empty list still needs a valid
+  // identity (Q-006), and its credential strength must satisfy the method.
   if (tool.type === 'user') {
+    if (auth.kind === 'oauth') {
+      return hasAnyScope(auth.identity.scopes, tool.scopes)
+        && oauthCredentialAllowed(tool.method, auth.identity.credential);
+    }
     return auth.kind === 'user'
       && hasRequiredScopes(auth.session.scopes, tool.scopes)
       && secretAllowed(auth.token.secret, auth.session.secret);
@@ -451,6 +487,17 @@ export function requiresSecret(_method: string) {
 export function sameCaller(a: AuthContext, b: AuthContext) {
   if (a.kind === 'public' || b.kind === 'public') {
     return a.kind === b.kind;
+  }
+
+  //an OAuth identity has no key to compare; the same grant for the same
+  // person, client and resource is the same caller
+  if (a.kind === 'oauth' || b.kind === 'oauth') {
+    return a.kind === 'oauth'
+      && b.kind === 'oauth'
+      && a.identity.grantId === b.identity.grantId
+      && a.identity.profileId === b.identity.profileId
+      && a.identity.clientId === b.identity.clientId
+      && a.identity.resource === b.identity.resource;
   }
 
   return a.kind !== 'invalid'
@@ -632,6 +679,27 @@ export function isRecord(value: unknown): value is Record<string, unknown> {
  */
 function hasRequiredScopes(owned: string[], required: string[]) {
   return required.every(scope => owned.includes(scope));
+}
+
+/**
+ * Check whether one OAuth grant holds any one of the scopes a tool lists, or
+ * the tool lists none.
+ */
+function hasAnyScope(owned: string[], required: string[]) {
+  return required.length === 0 || owned.some(scope => required.includes(scope));
+}
+
+/**
+ * Check whether one OAuth identity's credential strength satisfies a tool's
+ * method. The OAuth spec keeps ID-only read credentials: a GET tool accepts
+ * one, and every other method needs the full key. Legacy app and user keys
+ * get no such allowance; every method needs their secret.
+ */
+function oauthCredentialAllowed(
+  method: string,
+  credential: 'read' | 'full'
+) {
+  return String(method).toUpperCase() === 'GET' || credential === 'full';
 }
 
 /**

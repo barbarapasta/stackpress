@@ -1,5 +1,10 @@
 use "stackpress/stackpress.idea"
 use "stackpress-ai/schema.idea"
+//Adds the nine private OAuth storage models (spec 00005-mcp-native-oauth).
+//`stackpress-session/oauth.idea` itself `use`s `stackpress-session/schema.idea`
+//for Profile/Auth, which `stackpress/stackpress.idea` already includes
+//(via stackpress-api/schema.idea); generation dedupes the repeated include.
+use "stackpress-session/oauth.idea"
 
 enum PublishStatus {
   DRAFT "DRAFT"

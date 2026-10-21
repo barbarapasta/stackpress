@@ -1,0 +1,47 @@
+{
+  "node": "v22.23.2",
+  "sdk": "1.29.0",
+  "ingest": "0.10.8",
+  "checks": [
+    {
+      "name": "standalone older SSE",
+      "result": "passed",
+      "cases": [
+        "real SDK client and server",
+        "anonymous GET/init/public/protected discovery",
+        "POST401/403 before accepted reply",
+        "first approval binding",
+        "cross-person and cross-approval denial",
+        "fresh rotated keys",
+        "ID-only read and write denial",
+        "wrong secret denies read",
+        "unknown tool has no effect",
+        "unclassified controls require full key",
+        "expiry/revoke/disabled account",
+        "Origin on GET and POST",
+        "overlapping request identity",
+        "late rejection arrives on GET stream after POST202; no effect"
+      ]
+    },
+    {
+      "name": "real Ingest attached older SSE",
+      "result": "passed",
+      "cases": [
+        "real SDK client and server",
+        "anonymous GET/init/public/protected discovery",
+        "POST401/403 before accepted reply",
+        "first approval binding",
+        "cross-person and cross-approval denial",
+        "fresh rotated keys",
+        "ID-only read and write denial",
+        "wrong secret denies read",
+        "unknown tool has no effect",
+        "unclassified controls require full key",
+        "expiry/revoke/disabled account",
+        "Origin on GET and POST",
+        "overlapping request identity",
+        "late rejection arrives on GET stream after POST202; no effect"
+      ]
+    }
+  ]
+}

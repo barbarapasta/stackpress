@@ -4,6 +4,7 @@ import type { SSEServerTransport } from '@modelcontextprotocol/sdk/server/sse.js
 import type { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
 import type Server from '@stackpress/ingest/Server';
 import type { Application, Session } from 'stackpress-api/types';
+import type { McpOAuthConfig, OAuthIdentity } from 'stackpress-session/types';
 
 //this exported schema alias keeps config serializable while still letting the
 // package treat tool input and output contracts as JSON Schema documents.
@@ -36,11 +37,13 @@ export type McpConfig = {
   mode?: McpSessionMode,
   messages?: string,
   name?: string,
+  oauth?: McpOAuthConfig,
   port?: number,
   route?: string,
   sse?: {
     host?: string,
     key?: string,
+    oauth?: McpOAuthConfig,
     port?: number,
     route?: string
   },
@@ -96,19 +99,28 @@ export type AuthContext
   = { kind: 'public' }
   | { kind: 'invalid' }
   | { kind: 'app', token: Token, application: Application }
-  | { kind: 'user', token: Token, session: Session };
+  | { kind: 'user', token: Token, session: Session }
+  | { kind: 'oauth', identity: OAuthIdentity };
 
 //this caller record is what a tool event is told about who is calling. It is
 // built by the system after the key or sign-in was checked and is kept apart
 // from tool input, which can never set or override it. Read it from the
 // request with the caller() helper.
 export type Caller = {
-  kind: 'public' | 'app' | 'user' | 'person',
+  kind: 'public' | 'app' | 'user' | 'person' | 'oauth',
   profileId?: string,
   sessionId?: string,
   applicationId?: string,
   roles?: string[],
-  scopes: string[]
+  scopes: string[],
+  //an OAuth caller is a person acting through an approved grant. The grant
+  // is recorded so the event knows which client and approval it answers.
+  oauth?: {
+    clientId: string,
+    grantId: string,
+    resource: string,
+    scopes: string[]
+  }
 };
 
 //this undoing record is what an inverse tool's event is told about the action

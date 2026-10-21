@@ -143,6 +143,13 @@ export default async function bootstrap() {
   await server.resolve('listen');
   //add routes
   await server.resolve('route');
+  //finalize OAuth (spec 00005-mcp-native-oauth, configuration.md:
+  //"After all route listeners complete, serving app bootstraps explicitly
+  //resolve that event and fail on a non-200 result").
+  const oauth = await server.resolve('oauth-finalize');
+  if (oauth.code !== 200) {
+    throw new Error(`OAuth failed to start: ${oauth.error || oauth.code}`);
+  }
   //return the server
   return server;
 };

@@ -1,0 +1,253 @@
+{
+  "timestamp": "2026-09-28T14:14:11.800Z",
+  "node": "v22.23.2",
+  "results": [
+    {
+      "driver": "pglite",
+      "version": "PostgreSQL 17.5 on aarch64-unknown-linux-gnu, compiled by emcc (Emscripten gcc/clang-like replacement + linker emulating GNU ld) 3.1.74 (1092ec30a3fb1d46b1782ff1b4db5094d3d06ae5), 32-bit",
+      "baseline": {
+        "isolated": false,
+        "rows": [
+          {
+            "id": "inner"
+          },
+          {
+            "id": "outer"
+          }
+        ],
+        "outerError": "force outer rollback",
+        "outsiderLost": true
+      },
+      "candidate": "pass",
+      "checks": [
+        "five concurrent code exchanges: exactly one winner each",
+        "five competing renewals: one winner; replay cancels the whole approval",
+        "both renewal/revocation lock orders preserve cancellation",
+        "real SQL failure rolls back consumption, replacement, access key and lock row",
+        "reuse four generations back is retained and stops the latest key",
+        "renewal preserves final deadline, caps access expiry, replaces old read ID and secret",
+        "unknown token does not cancel someone else’s approval",
+        "every callback and query retains the exact native transaction resource"
+      ],
+      "queryCount": 425,
+      "queries": [
+        "SELECT version() AS version",
+        "DROP TABLE IF EXISTS proof_overlap",
+        "CREATE TABLE proof_overlap (id VARCHAR(30) PRIMARY KEY)",
+        "BEGIN",
+        "INSERT INTO proof_overlap (id) VALUES ($1)",
+        "COMMIT",
+        "ROLLBACK",
+        "SELECT id FROM proof_overlap ORDER BY id",
+        "DELETE FROM proof_overlap",
+        "SELECT * FROM proof_overlap",
+        "DROP TABLE IF EXISTS proof_tokens",
+        "DROP TABLE IF EXISTS proof_codes",
+        "DROP TABLE IF EXISTS proof_grants",
+        "CREATE TABLE proof_grants (\n    id VARCHAR(80) PRIMARY KEY, cancelled INTEGER NOT NULL,\n    serial INTEGER NOT NULL, deadline BIGINT NOT NULL,\n    access_hash VARCHAR(64), access_secret_hash VARCHAR(64),\n    access_expires BIGINT NOT NULL\n  )",
+        "CREATE TABLE proof_codes (\n    token_hash VARCHAR(64) PRIMARY KEY, grant_id VARCHAR(80) NOT NULL,\n    used INTEGER NOT NULL\n  )",
+        "CREATE TABLE proof_tokens (\n    token_hash VARCHAR(64) PRIMARY KEY, grant_id VARCHAR(80) NOT NULL,\n    used INTEGER NOT NULL, expires BIGINT NOT NULL\n  )",
+        "DELETE FROM proof_tokens WHERE grant_id = $1",
+        "DELETE FROM proof_codes WHERE grant_id = $1",
+        "DELETE FROM proof_grants WHERE id = $1",
+        "INSERT INTO proof_grants\n    (id, cancelled, serial, deadline, access_hash, access_secret_hash, access_expires)\n    VALUES ($1, 0, 0, 10000, $2, $3, 1000)",
+        "INSERT INTO proof_codes\n    (token_hash, grant_id, used) VALUES ($1, $2, 0)",
+        "INSERT INTO proof_tokens\n    (token_hash, grant_id, used, expires) VALUES ($1, $2, 0, 10000)",
+        "UPDATE proof_grants SET serial = serial + 1 WHERE id = $1",
+        "SELECT * FROM proof_grants WHERE id = $1",
+        "SELECT * FROM proof_codes WHERE token_hash = $1 AND grant_id = $2",
+        "UPDATE proof_codes SET used = 1 WHERE token_hash = $1",
+        "INSERT INTO proof_tokens\n      (token_hash, grant_id, used, expires) VALUES ($1, $2, 0, $3)",
+        "UPDATE proof_grants SET access_hash = $1, access_secret_hash = $2,\n      access_expires = $3 WHERE id = $4",
+        "SELECT * FROM proof_tokens WHERE grant_id = $1",
+        "SELECT * FROM proof_tokens WHERE token_hash = $1 AND grant_id = $2",
+        "UPDATE proof_tokens SET used = 1 WHERE token_hash = $1",
+        "UPDATE proof_grants SET cancelled = 1 WHERE id = $1",
+        "INSERT INTO proof_table_that_does_not_exist (id) VALUES ($1)"
+      ]
+    },
+    {
+      "driver": "postgres",
+      "version": "PostgreSQL 17.11 on x86_64-pc-linux-musl, compiled by gcc (Alpine 15.2.0) 15.2.0, 64-bit",
+      "baseline": {
+        "isolated": false,
+        "rows": [
+          {
+            "id": "inner"
+          },
+          {
+            "id": "outer"
+          }
+        ],
+        "outerError": "force outer rollback",
+        "outsiderLost": true
+      },
+      "candidate": "pass",
+      "checks": [
+        "five concurrent code exchanges: exactly one winner each",
+        "five competing renewals: one winner; replay cancels the whole approval",
+        "both renewal/revocation lock orders preserve cancellation",
+        "real SQL failure rolls back consumption, replacement, access key and lock row",
+        "reuse four generations back is retained and stops the latest key",
+        "renewal preserves final deadline, caps access expiry, replaces old read ID and secret",
+        "unknown token does not cancel someone else’s approval",
+        "every callback and query retains the exact native transaction resource"
+      ],
+      "queryCount": 449,
+      "queries": [
+        "SELECT version() AS version",
+        "DROP TABLE IF EXISTS proof_overlap",
+        "CREATE TABLE proof_overlap (id VARCHAR(30) PRIMARY KEY)",
+        "BEGIN",
+        "INSERT INTO proof_overlap (id) VALUES ($1)",
+        "COMMIT",
+        "ROLLBACK",
+        "SELECT id FROM proof_overlap ORDER BY id",
+        "DELETE FROM proof_overlap",
+        "SELECT * FROM proof_overlap",
+        "DROP TABLE IF EXISTS proof_tokens",
+        "DROP TABLE IF EXISTS proof_codes",
+        "DROP TABLE IF EXISTS proof_grants",
+        "CREATE TABLE proof_grants (\n    id VARCHAR(80) PRIMARY KEY, cancelled INTEGER NOT NULL,\n    serial INTEGER NOT NULL, deadline BIGINT NOT NULL,\n    access_hash VARCHAR(64), access_secret_hash VARCHAR(64),\n    access_expires BIGINT NOT NULL\n  )",
+        "CREATE TABLE proof_codes (\n    token_hash VARCHAR(64) PRIMARY KEY, grant_id VARCHAR(80) NOT NULL,\n    used INTEGER NOT NULL\n  )",
+        "CREATE TABLE proof_tokens (\n    token_hash VARCHAR(64) PRIMARY KEY, grant_id VARCHAR(80) NOT NULL,\n    used INTEGER NOT NULL, expires BIGINT NOT NULL\n  )",
+        "DELETE FROM proof_tokens WHERE grant_id = $1",
+        "DELETE FROM proof_codes WHERE grant_id = $1",
+        "DELETE FROM proof_grants WHERE id = $1",
+        "INSERT INTO proof_grants\n    (id, cancelled, serial, deadline, access_hash, access_secret_hash, access_expires)\n    VALUES ($1, 0, 0, 10000, $2, $3, 1000)",
+        "INSERT INTO proof_codes\n    (token_hash, grant_id, used) VALUES ($1, $2, 0)",
+        "INSERT INTO proof_tokens\n    (token_hash, grant_id, used, expires) VALUES ($1, $2, 0, 10000)",
+        "SELECT * FROM proof_tokens WHERE grant_id = $1",
+        "SELECT * FROM proof_grants WHERE id = $1",
+        "UPDATE proof_grants SET serial = serial + 1 WHERE id = $1",
+        "SELECT * FROM proof_codes WHERE token_hash = $1 AND grant_id = $2",
+        "UPDATE proof_codes SET used = 1 WHERE token_hash = $1",
+        "INSERT INTO proof_tokens\n      (token_hash, grant_id, used, expires) VALUES ($1, $2, 0, $3)",
+        "UPDATE proof_grants SET access_hash = $1, access_secret_hash = $2,\n      access_expires = $3 WHERE id = $4",
+        "INSERT INTO proof_table_that_does_not_exist (id) VALUES ($1)",
+        "SELECT * FROM proof_tokens WHERE token_hash = $1 AND grant_id = $2",
+        "UPDATE proof_tokens SET used = 1 WHERE token_hash = $1",
+        "UPDATE proof_grants SET cancelled = 1 WHERE id = $1"
+      ]
+    },
+    {
+      "driver": "mysql",
+      "version": "8.4.11",
+      "baseline": {
+        "isolated": false,
+        "rows": [
+          {
+            "id": "inner"
+          },
+          {
+            "id": "outer"
+          }
+        ],
+        "outerError": "force outer rollback",
+        "outsiderLost": true
+      },
+      "candidate": "pass",
+      "checks": [
+        "five concurrent code exchanges: exactly one winner each",
+        "five competing renewals: one winner; replay cancels the whole approval",
+        "both renewal/revocation lock orders preserve cancellation",
+        "real SQL failure rolls back consumption, replacement, access key and lock row",
+        "reuse four generations back is retained and stops the latest key",
+        "renewal preserves final deadline, caps access expiry, replaces old read ID and secret",
+        "unknown token does not cancel someone else’s approval",
+        "every callback and query retains the exact native transaction resource"
+      ],
+      "queryCount": 359,
+      "queries": [
+        "SELECT version() AS version",
+        "DROP TABLE IF EXISTS proof_overlap",
+        "CREATE TABLE proof_overlap (id VARCHAR(30) PRIMARY KEY)",
+        "INSERT INTO proof_overlap (id) VALUES (?)",
+        "SELECT id FROM proof_overlap ORDER BY id",
+        "DELETE FROM proof_overlap",
+        "SELECT * FROM proof_overlap",
+        "DROP TABLE IF EXISTS proof_tokens",
+        "DROP TABLE IF EXISTS proof_codes",
+        "DROP TABLE IF EXISTS proof_grants",
+        "CREATE TABLE proof_grants (\n    id VARCHAR(80) PRIMARY KEY, cancelled INTEGER NOT NULL,\n    serial INTEGER NOT NULL, deadline BIGINT NOT NULL,\n    access_hash VARCHAR(64), access_secret_hash VARCHAR(64),\n    access_expires BIGINT NOT NULL\n  )",
+        "CREATE TABLE proof_codes (\n    token_hash VARCHAR(64) PRIMARY KEY, grant_id VARCHAR(80) NOT NULL,\n    used INTEGER NOT NULL\n  )",
+        "CREATE TABLE proof_tokens (\n    token_hash VARCHAR(64) PRIMARY KEY, grant_id VARCHAR(80) NOT NULL,\n    used INTEGER NOT NULL, expires BIGINT NOT NULL\n  )",
+        "DELETE FROM proof_tokens WHERE grant_id = ?",
+        "DELETE FROM proof_codes WHERE grant_id = ?",
+        "DELETE FROM proof_grants WHERE id = ?",
+        "INSERT INTO proof_grants\n    (id, cancelled, serial, deadline, access_hash, access_secret_hash, access_expires)\n    VALUES (?, 0, 0, 10000, ?, ?, 1000)",
+        "INSERT INTO proof_codes\n    (token_hash, grant_id, used) VALUES (?, ?, 0)",
+        "INSERT INTO proof_tokens\n    (token_hash, grant_id, used, expires) VALUES (?, ?, 0, 10000)",
+        "SELECT * FROM proof_tokens WHERE grant_id = ?",
+        "SELECT * FROM proof_grants WHERE id = ?",
+        "UPDATE proof_grants SET serial = serial + 1 WHERE id = ?",
+        "SELECT * FROM proof_codes WHERE token_hash = ? AND grant_id = ?",
+        "UPDATE proof_codes SET used = 1 WHERE token_hash = ?",
+        "INSERT INTO proof_tokens\n      (token_hash, grant_id, used, expires) VALUES (?, ?, 0, ?)",
+        "UPDATE proof_grants SET access_hash = ?, access_secret_hash = ?,\n      access_expires = ? WHERE id = ?",
+        "INSERT INTO proof_table_that_does_not_exist (id) VALUES (?)",
+        "SELECT * FROM proof_tokens WHERE token_hash = ? AND grant_id = ?",
+        "UPDATE proof_tokens SET used = 1 WHERE token_hash = ?",
+        "UPDATE proof_grants SET cancelled = 1 WHERE id = ?"
+      ]
+    },
+    {
+      "driver": "sqlite",
+      "version": "3.50.4",
+      "baseline": {
+        "isolated": false,
+        "rows": [],
+        "innerError": "cannot start a transaction within a transaction",
+        "outerError": "cannot rollback - no transaction is active",
+        "outsiderLost": true
+      },
+      "candidate": "pass",
+      "checks": [
+        "five concurrent code exchanges: exactly one winner each",
+        "five competing renewals: one winner; replay cancels the whole approval",
+        "both renewal/revocation lock orders preserve cancellation",
+        "real SQL failure rolls back consumption, replacement, access key and lock row",
+        "reuse four generations back is retained and stops the latest key",
+        "renewal preserves final deadline, caps access expiry, replaces old read ID and secret",
+        "unknown token does not cancel someone else’s approval",
+        "every callback and query retains the exact native transaction resource"
+      ],
+      "queryCount": 448,
+      "queries": [
+        "SELECT sqlite_version() AS version",
+        "DROP TABLE IF EXISTS proof_overlap",
+        "CREATE TABLE proof_overlap (id VARCHAR(30) PRIMARY KEY)",
+        "BEGIN TRANSACTION",
+        "INSERT INTO proof_overlap (id) VALUES (?)",
+        "ROLLBACK",
+        "SELECT id FROM proof_overlap ORDER BY id",
+        "DELETE FROM proof_overlap",
+        "SELECT * FROM proof_overlap",
+        "DROP TABLE IF EXISTS proof_tokens",
+        "DROP TABLE IF EXISTS proof_codes",
+        "DROP TABLE IF EXISTS proof_grants",
+        "CREATE TABLE proof_grants (\n    id VARCHAR(80) PRIMARY KEY, cancelled INTEGER NOT NULL,\n    serial INTEGER NOT NULL, deadline BIGINT NOT NULL,\n    access_hash VARCHAR(64), access_secret_hash VARCHAR(64),\n    access_expires BIGINT NOT NULL\n  )",
+        "CREATE TABLE proof_codes (\n    token_hash VARCHAR(64) PRIMARY KEY, grant_id VARCHAR(80) NOT NULL,\n    used INTEGER NOT NULL\n  )",
+        "CREATE TABLE proof_tokens (\n    token_hash VARCHAR(64) PRIMARY KEY, grant_id VARCHAR(80) NOT NULL,\n    used INTEGER NOT NULL, expires BIGINT NOT NULL\n  )",
+        "DELETE FROM proof_tokens WHERE grant_id = ?",
+        "DELETE FROM proof_codes WHERE grant_id = ?",
+        "DELETE FROM proof_grants WHERE id = ?",
+        "INSERT INTO proof_grants\n    (id, cancelled, serial, deadline, access_hash, access_secret_hash, access_expires)\n    VALUES (?, 0, 0, 10000, ?, ?, 1000)",
+        "INSERT INTO proof_codes\n    (token_hash, grant_id, used) VALUES (?, ?, 0)",
+        "INSERT INTO proof_tokens\n    (token_hash, grant_id, used, expires) VALUES (?, ?, 0, 10000)",
+        "SELECT * FROM proof_tokens WHERE grant_id = ?",
+        "SELECT * FROM proof_grants WHERE id = ?",
+        "UPDATE proof_grants SET serial = serial + 1 WHERE id = ?",
+        "COMMIT",
+        "SELECT * FROM proof_codes WHERE token_hash = ? AND grant_id = ?",
+        "UPDATE proof_codes SET used = 1 WHERE token_hash = ?",
+        "INSERT INTO proof_tokens\n      (token_hash, grant_id, used, expires) VALUES (?, ?, 0, ?)",
+        "UPDATE proof_grants SET access_hash = ?, access_secret_hash = ?,\n      access_expires = ? WHERE id = ?",
+        "INSERT INTO proof_table_that_does_not_exist (id) VALUES (?)",
+        "SELECT * FROM proof_tokens WHERE token_hash = ? AND grant_id = ?",
+        "UPDATE proof_tokens SET used = 1 WHERE token_hash = ?",
+        "UPDATE proof_grants SET cancelled = 1 WHERE id = ?"
+      ]
+    }
+  ]
+}

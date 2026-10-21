@@ -156,6 +156,20 @@ export default async function bootstrap() {
   await server.resolve('listen');
   //add routes
   await server.resolve('route');
+  //finalize OAuth (spec 00005-mcp-native-oauth, configuration.md:
+  //"After all route listeners complete, serving app bootstraps explicitly
+  //resolve that event and fail on a non-200 result"; "Generation/build-only
+  //commands do not finalize a database that has not been generated yet").
+  //This `config/develop.ts` bootstrap is shared by every `stackpress`
+  //command that points `--b` here (`generate`, `migrate`, `populate`,
+  //`push`, `query`, `purge`, `emit`, `develop`), not only serving ones, so
+  //only finalize for the two that actually serve requests.
+  if ([ 'develop', 'serve' ].includes(process.argv[2])) {
+    const oauth = await server.resolve('oauth-finalize');
+    if (oauth.code !== 200) {
+      throw new Error(`OAuth failed to start: ${oauth.error || oauth.code}`);
+    }
+  }
   //return the server
   return server;
 };

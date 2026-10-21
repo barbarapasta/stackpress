@@ -909,3 +909,301 @@
   font-size: 20px;
   text-transform: uppercase;
 }
+
+/* OAuth Approval, Extra-Check And Connections Pages (task 00007) */
+
+.oauth-page {
+  background-color: var(--bg-zero);
+  box-sizing: border-box;
+  color: var(--default);
+  height: 100%;
+  overflow: auto;
+  padding: 24px 16px;
+  width: 100%;
+}
+
+.oauth-card {
+  background-color: var(--bg-first);
+  border: 1px solid var(--bg-third);
+  box-sizing: border-box;
+  margin: 0 auto;
+  max-width: 560px;
+  width: 100%;
+}
+
+.oauth-page-wide .oauth-card {
+  max-width: 760px;
+}
+
+.oauth-card-header {
+  align-items: center;
+  background-color: var(--bg-second);
+  display: flex;
+  gap: 10px;
+  padding: 12px 16px;
+}
+
+.oauth-title {
+  font-size: 18px;
+  font-weight: bold;
+  margin: 0;
+}
+
+.oauth-card-body {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 16px;
+}
+
+.oauth-card-footer {
+  border-top: 1px solid var(--bg-third);
+  padding: 12px 16px;
+}
+
+.oauth-lead {
+  font-size: 16px;
+  margin: 0;
+}
+
+.oauth-subtitle {
+  font-size: 15px;
+  font-weight: bold;
+  margin: 4px 0 6px;
+  padding: 0;
+}
+
+.oauth-muted {
+  display: block;
+  font-size: 13px;
+  opacity: 0.8;
+}
+
+.oauth-break {
+  word-break: break-all;
+}
+
+.oauth-code {
+  background-color: var(--bg-second);
+  border-radius: 3px;
+  display: inline-block;
+  font-family: monospace;
+  font-size: 13px;
+  margin: 2px 4px 2px 0;
+  padding: 1px 4px;
+  word-break: break-all;
+}
+
+.oauth-facts {
+  display: grid;
+  gap: 6px 12px;
+  grid-template-columns: max-content 1fr;
+  margin: 0;
+}
+
+.oauth-facts dt {
+  font-weight: bold;
+}
+
+.oauth-facts dd {
+  margin: 0;
+  min-width: 0;
+}
+
+.oauth-client-name {
+  display: block;
+  font-weight: bold;
+  word-break: break-word;
+}
+
+.oauth-notice,
+.oauth-alert {
+  border: 1px solid var(--bg-third);
+  border-left-width: 4px;
+  display: flex;
+  gap: 10px;
+  padding: 10px 12px;
+}
+
+.oauth-notice p,
+.oauth-alert p {
+  margin: 0 0 4px;
+}
+
+.oauth-notice {
+  border-left-color: #d97706;
+}
+
+.oauth-alert-error {
+  border-left-color: #dc2626;
+}
+
+.oauth-alert-success {
+  border-left-color: #16a34a;
+}
+
+.oauth-alert-warning {
+  border-left-color: #d97706;
+}
+
+.oauth-alert-info {
+  border-left-color: var(--info, #2563eb);
+}
+
+.oauth-form {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.oauth-fieldset {
+  border: 1px solid var(--bg-third);
+  margin: 0;
+  padding: 8px 12px 12px;
+}
+
+.oauth-choice {
+  align-items: flex-start;
+  display: flex;
+  gap: 10px;
+  padding: 6px 0;
+}
+
+.oauth-choice input {
+  height: 18px;
+  margin-top: 2px;
+  width: 18px;
+}
+
+.oauth-choice-name {
+  display: block;
+  font-weight: bold;
+}
+
+.oauth-list {
+  margin: 0;
+  padding-left: 18px;
+}
+
+.oauth-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.oauth-label {
+  font-weight: bold;
+}
+
+.oauth-input {
+  background-color: var(--white, #ffffff);
+  border: 1px solid var(--default);
+  box-sizing: border-box;
+  color: #222222;
+  font-family: monospace;
+  font-size: 20px;
+  letter-spacing: 4px;
+  max-width: 200px;
+  padding: 8px 10px;
+}
+
+.oauth-input[aria-invalid="true"] {
+  border-color: #dc2626;
+}
+
+.oauth-actions {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.oauth-inline-form {
+  display: inline-block;
+  margin: 0;
+}
+
+.oauth-button {
+  border: 1px solid transparent;
+  border-radius: 0;
+  cursor: pointer;
+  display: inline-block;
+  font-size: 15px;
+  min-height: 38px;
+  padding: 8px 16px;
+  text-decoration: none;
+}
+
+.oauth-button-primary {
+  background-color: var(--primary, #2563eb);
+  border-color: var(--primary, #2563eb);
+  color: #ffffff;
+}
+
+.oauth-button-secondary {
+  background-color: transparent;
+  border-color: var(--default);
+  color: var(--default);
+}
+
+.oauth-button-danger {
+  background-color: #b91c1c;
+  border-color: #b91c1c;
+  color: #ffffff;
+}
+
+.oauth-button:focus-visible,
+.oauth-choice input:focus-visible,
+.oauth-input:focus-visible,
+.oauth-links a:focus-visible {
+  outline: 3px solid var(--info, #2563eb);
+  outline-offset: 2px;
+}
+
+.oauth-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px;
+}
+
+.oauth-links a {
+  color: var(--info, #2563eb);
+  font-size: 14px;
+}
+
+.oauth-connections {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.oauth-connection {
+  border: 1px solid var(--bg-third);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 12px;
+}
+
+.oauth-connection-name {
+  font-size: 16px;
+  margin: 0;
+  word-break: break-word;
+}
+
+.oauth-empty {
+  align-items: center;
+  border: 1px dashed var(--bg-third);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 24px;
+  text-align: center;
+}
+
+.oauth-list .oauth-muted {
+  display: inline;
+}

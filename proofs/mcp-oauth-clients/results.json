@@ -1,0 +1,802 @@
+{
+  "timestamp": "2026-09-28T14:19:39.865Z",
+  "node": "v22.23.2",
+  "browser": "153.0.8010.12",
+  "clients": [
+    {
+      "name": "codex",
+      "simulatedSignIn": true,
+      "deterministicModel": true,
+      "version": "codex-cli 0.157.0",
+      "login": {
+        "passed": true,
+        "redirectScheme": "http:",
+        "redirectHost": "127.0.0.1"
+      },
+      "loginTrace": [
+        {
+          "stage": "mcp-accepted",
+          "hasVerifier": false
+        },
+        {
+          "stage": "resource-discovery",
+          "hasVerifier": false
+        },
+        {
+          "stage": "resource-discovery",
+          "hasVerifier": false
+        },
+        {
+          "stage": "server-discovery",
+          "hasVerifier": false
+        },
+        {
+          "stage": "mcp-accepted",
+          "hasVerifier": false
+        },
+        {
+          "stage": "resource-discovery",
+          "hasVerifier": false
+        },
+        {
+          "stage": "resource-discovery",
+          "hasVerifier": false
+        },
+        {
+          "stage": "server-discovery",
+          "hasVerifier": false
+        },
+        {
+          "stage": "registration",
+          "hasVerifier": false
+        },
+        {
+          "stage": "authorization",
+          "resource": "http://127.0.0.1:41557/mcp",
+          "scope": "articles:read articles:write",
+          "pkceMethod": "S256",
+          "hasVerifier": false
+        },
+        {
+          "stage": "approval",
+          "resource": "http://127.0.0.1:41557/mcp",
+          "scope": "articles:read articles:write",
+          "pkceMethod": "S256",
+          "hasVerifier": false
+        },
+        {
+          "stage": "token",
+          "resource": "http://127.0.0.1:41557/mcp",
+          "grantType": "authorization_code",
+          "hasVerifier": true
+        }
+      ],
+      "tool": {
+        "exitCode": 0,
+        "modelCalls": [
+          {
+            "path": "/responses",
+            "tools": [
+              "mcp__stackpress_proof_codex_1428440.admin_only",
+              "mcp__stackpress_proof_codex_1428440.app_only",
+              "mcp__stackpress_proof_codex_1428440.empty_permissions",
+              "mcp__stackpress_proof_codex_1428440.public_ping",
+              "mcp__stackpress_proof_codex_1428440.read_articles",
+              "mcp__stackpress_proof_codex_1428440.write_articles"
+            ],
+            "requestedTool": "mcp__stackpress_proof_codex_1428440.read_articles",
+            "receivedToolResult": false
+          },
+          {
+            "path": "/responses",
+            "tools": [
+              "mcp__stackpress_proof_codex_1428440.admin_only",
+              "mcp__stackpress_proof_codex_1428440.app_only",
+              "mcp__stackpress_proof_codex_1428440.empty_permissions",
+              "mcp__stackpress_proof_codex_1428440.public_ping",
+              "mcp__stackpress_proof_codex_1428440.read_articles",
+              "mcp__stackpress_proof_codex_1428440.write_articles"
+            ],
+            "receivedToolResult": true
+          }
+        ],
+        "trace": [
+          {
+            "stage": "mcp-accepted",
+            "hasVerifier": false
+          },
+          {
+            "stage": "resource-discovery",
+            "hasVerifier": false
+          },
+          {
+            "stage": "resource-discovery",
+            "hasVerifier": false
+          },
+          {
+            "stage": "server-discovery",
+            "hasVerifier": false
+          },
+          {
+            "stage": "mcp-accepted",
+            "hasVerifier": false,
+            "user": "fixture-user",
+            "method": "initialize"
+          },
+          {
+            "stage": "mcp-accepted",
+            "hasVerifier": false,
+            "user": "fixture-user",
+            "method": "notifications/initialized"
+          },
+          {
+            "stage": "mcp-accepted",
+            "hasVerifier": false,
+            "user": "fixture-user",
+            "method": "tools/list"
+          },
+          {
+            "stage": "mcp-accepted",
+            "hasVerifier": false,
+            "tool": "read_articles",
+            "user": "fixture-user",
+            "method": "tools/call"
+          },
+          {
+            "stage": "mcp-tool-completed",
+            "hasVerifier": false,
+            "tool": "read_articles",
+            "user": "fixture-user",
+            "status": 200
+          }
+        ],
+        "diagnostic": "Reading additional input from stdin...\n2026-09-28T14:19:41.215022Z ERROR codex_models_manager::manager: failed to refresh available models: \n2026-09-28T14:19:41.241870Z ERROR codex_models_manager::manager: failed to refresh available models: \nOpenAI Codex v0.157.0\n--------\nworkdir: /tmp/stackpress-client-proof-RKNYlM\nmodel: proof\nprovider: proof\napproval: never\nsandbox: read-only\nreasoning effort: none\nreasoning summaries: none\nsession id: 01a0e862-c13a-7f60-be16-27218e8536ca\n--------\nuser\nCall the proof read_articles MCP tool once.\nwarning: Codex could not find bubblewrap on PATH. Install bubblewrap with your OS package manager. See the sandbox prerequisites: [URL] Codex will use the bundled bubblewrap in the meantime.\nwarning: Model metadata for `proof` not found. Defaulting to fallback metadata; this can degrade performance and cause issues.\nmcp: stackpress_proof_codex_1428440/read_articles started\nmcp: stackpress_proof_codex_1428440/read_articles (completed)\ncodex\nProof completed.\ntokens used\n4\nProof completed.\n"
+      },
+      "api": {
+        "fullKeyRead": 200,
+        "idRead": 200,
+        "fullKeyWrite": 200,
+        "idWrite": 401,
+        "omittedRoute": 403,
+        "wrongResource": 403,
+        "renewedKey": 200,
+        "oldKey": 401,
+        "revokedKey": 401,
+        "reapprovedKey": 200
+      },
+      "renewal": {
+        "exitCode": 0,
+        "modelCalls": [
+          {
+            "path": "/responses",
+            "tools": [
+              "mcp__stackpress_proof_codex_1428440.admin_only",
+              "mcp__stackpress_proof_codex_1428440.app_only",
+              "mcp__stackpress_proof_codex_1428440.empty_permissions",
+              "mcp__stackpress_proof_codex_1428440.public_ping",
+              "mcp__stackpress_proof_codex_1428440.read_articles",
+              "mcp__stackpress_proof_codex_1428440.write_articles"
+            ],
+            "requestedTool": "mcp__stackpress_proof_codex_1428440.read_articles",
+            "receivedToolResult": false
+          },
+          {
+            "path": "/responses",
+            "tools": [
+              "mcp__stackpress_proof_codex_1428440.admin_only",
+              "mcp__stackpress_proof_codex_1428440.app_only",
+              "mcp__stackpress_proof_codex_1428440.empty_permissions",
+              "mcp__stackpress_proof_codex_1428440.public_ping",
+              "mcp__stackpress_proof_codex_1428440.read_articles",
+              "mcp__stackpress_proof_codex_1428440.write_articles"
+            ],
+            "receivedToolResult": true
+          }
+        ],
+        "trace": [
+          {
+            "stage": "mcp-accepted",
+            "hasVerifier": false
+          },
+          {
+            "stage": "resource-discovery",
+            "hasVerifier": false
+          },
+          {
+            "stage": "resource-discovery",
+            "hasVerifier": false
+          },
+          {
+            "stage": "server-discovery",
+            "hasVerifier": false
+          },
+          {
+            "stage": "mcp-refused",
+            "hasVerifier": false,
+            "method": "initialize",
+            "status": 401
+          },
+          {
+            "stage": "error",
+            "scope": "invalid_token",
+            "hasVerifier": false
+          },
+          {
+            "stage": "token",
+            "resource": "http://127.0.0.1:41557/mcp",
+            "scope": "articles:read articles:write",
+            "grantType": "refresh_token",
+            "hasVerifier": false
+          },
+          {
+            "stage": "mcp-accepted",
+            "hasVerifier": false,
+            "user": "fixture-user",
+            "method": "initialize"
+          },
+          {
+            "stage": "mcp-accepted",
+            "hasVerifier": false,
+            "user": "fixture-user",
+            "method": "notifications/initialized"
+          },
+          {
+            "stage": "mcp-accepted",
+            "hasVerifier": false,
+            "user": "fixture-user",
+            "method": "tools/list"
+          },
+          {
+            "stage": "mcp-accepted",
+            "hasVerifier": false,
+            "tool": "read_articles",
+            "user": "fixture-user",
+            "method": "tools/call"
+          },
+          {
+            "stage": "mcp-tool-completed",
+            "hasVerifier": false,
+            "tool": "read_articles",
+            "user": "fixture-user",
+            "status": 200
+          }
+        ],
+        "diagnostic": "Reading additional input from stdin...\n2026-09-28T14:19:43.493979Z ERROR codex_models_manager::manager: failed to refresh available models: \n2026-09-28T14:19:43.508783Z ERROR codex_models_manager::manager: failed to refresh available models: \nOpenAI Codex v0.157.0\n--------\nworkdir: /tmp/stackpress-client-proof-RKNYlM\nmodel: proof\nprovider: proof\napproval: never\nsandbox: read-only\nreasoning effort: none\nreasoning summaries: none\nsession id: 01a0e862-ca15-76a3-a7f6-bf94c5cdd977\n--------\nuser\nCall the proof read_articles MCP tool once.\nwarning: Codex could not find bubblewrap on PATH. Install bubblewrap with your OS package manager. See the sandbox prerequisites: [URL] Codex will use the bundled bubblewrap in the meantime.\nwarning: Model metadata for `proof` not found. Defaulting to fallback metadata; this can degrade performance and cause issues.\nmcp: stackpress_proof_codex_1428440/read_articles started\nmcp: stackpress_proof_codex_1428440/read_articles (completed)\ncodex\nProof completed.\ntokens used\n4\nProof completed.\n"
+      },
+      "revoked": {
+        "exitCode": 0,
+        "modelCalls": [
+          {
+            "path": "/responses",
+            "tools": [],
+            "receivedToolResult": false
+          }
+        ],
+        "trace": [
+          {
+            "stage": "mcp-accepted",
+            "hasVerifier": false
+          },
+          {
+            "stage": "resource-discovery",
+            "hasVerifier": false
+          },
+          {
+            "stage": "resource-discovery",
+            "hasVerifier": false
+          },
+          {
+            "stage": "server-discovery",
+            "hasVerifier": false
+          },
+          {
+            "stage": "mcp-refused",
+            "hasVerifier": false,
+            "method": "initialize",
+            "status": 401
+          },
+          {
+            "stage": "error",
+            "scope": "invalid_token",
+            "hasVerifier": false
+          },
+          {
+            "stage": "token",
+            "resource": "http://127.0.0.1:41557/mcp",
+            "scope": "articles:read articles:write",
+            "grantType": "refresh_token",
+            "hasVerifier": false
+          },
+          {
+            "stage": "error",
+            "scope": "invalid_grant",
+            "hasVerifier": false
+          }
+        ],
+        "diagnostic": "Reading additional input from stdin...\n2026-09-28T14:19:45.713226Z ERROR codex_models_manager::manager: failed to refresh available models: \n2026-09-28T14:19:45.733168Z ERROR codex_models_manager::manager: failed to refresh available models: \nOpenAI Codex v0.157.0\n--------\nworkdir: /tmp/stackpress-client-proof-RKNYlM\nmodel: proof\nprovider: proof\napproval: never\nsandbox: read-only\nreasoning effort: none\nreasoning summaries: none\nsession id: 01a0e862-d2c5-7df3-9747-7e8d1f34421b\n--------\nuser\nCall the proof read_articles MCP tool once.\nwarning: Codex could not find bubblewrap on PATH. Install bubblewrap with your OS package manager. See the sandbox prerequisites: [URL] Codex will use the bundled bubblewrap in the meantime.\n2026-09-28T14:19:45.939238Z ERROR rmcp::transport::worker: worker quit with fatal: Transport channel closed, when AuthRequired(AuthRequiredError { www_authenticate_header: \"[credential redacted] error=\\\"invalid_token\\\", scope=\\\"articles:read articles:write\\\"\" })\nwarning: Model metadata for `proof` not found. Defaulting to fallback metadata; this can degrade performance and cause issues.\ncodex\nProof completed.\ntokens used\n2\nProof completed.\n"
+      },
+      "reapproval": {
+        "passed": true,
+        "redirectScheme": "http:",
+        "redirectHost": "127.0.0.1"
+      },
+      "restored": {
+        "exitCode": 0,
+        "modelCalls": [
+          {
+            "path": "/responses",
+            "tools": [
+              "mcp__stackpress_proof_codex_1428440.admin_only",
+              "mcp__stackpress_proof_codex_1428440.app_only",
+              "mcp__stackpress_proof_codex_1428440.empty_permissions",
+              "mcp__stackpress_proof_codex_1428440.public_ping",
+              "mcp__stackpress_proof_codex_1428440.read_articles",
+              "mcp__stackpress_proof_codex_1428440.write_articles"
+            ],
+            "requestedTool": "mcp__stackpress_proof_codex_1428440.read_articles",
+            "receivedToolResult": false
+          },
+          {
+            "path": "/responses",
+            "tools": [
+              "mcp__stackpress_proof_codex_1428440.admin_only",
+              "mcp__stackpress_proof_codex_1428440.app_only",
+              "mcp__stackpress_proof_codex_1428440.empty_permissions",
+              "mcp__stackpress_proof_codex_1428440.public_ping",
+              "mcp__stackpress_proof_codex_1428440.read_articles",
+              "mcp__stackpress_proof_codex_1428440.write_articles"
+            ],
+            "receivedToolResult": true
+          }
+        ],
+        "trace": [
+          {
+            "stage": "mcp-accepted",
+            "hasVerifier": false
+          },
+          {
+            "stage": "resource-discovery",
+            "hasVerifier": false
+          },
+          {
+            "stage": "resource-discovery",
+            "hasVerifier": false
+          },
+          {
+            "stage": "server-discovery",
+            "hasVerifier": false
+          },
+          {
+            "stage": "mcp-accepted",
+            "hasVerifier": false,
+            "user": "fixture-user",
+            "method": "initialize"
+          },
+          {
+            "stage": "mcp-accepted",
+            "hasVerifier": false,
+            "user": "fixture-user",
+            "method": "notifications/initialized"
+          },
+          {
+            "stage": "mcp-accepted",
+            "hasVerifier": false,
+            "user": "fixture-user",
+            "method": "tools/list"
+          },
+          {
+            "stage": "mcp-accepted",
+            "hasVerifier": false,
+            "tool": "read_articles",
+            "user": "fixture-user",
+            "method": "tools/call"
+          },
+          {
+            "stage": "mcp-tool-completed",
+            "hasVerifier": false,
+            "tool": "read_articles",
+            "user": "fixture-user",
+            "status": 200
+          }
+        ],
+        "diagnostic": "Reading additional input from stdin...\n2026-09-28T14:19:48.354442Z ERROR codex_models_manager::manager: failed to refresh available models: \n2026-09-28T14:19:48.405876Z ERROR codex_models_manager::manager: failed to refresh available models: \nOpenAI Codex v0.157.0\n--------\nworkdir: /tmp/stackpress-client-proof-RKNYlM\nmodel: proof\nprovider: proof\napproval: never\nsandbox: read-only\nreasoning effort: none\nreasoning summaries: none\nsession id: 01a0e862-dd37-7d23-8e75-59a4afbe3514\n--------\nuser\nCall the proof read_articles MCP tool once.\nwarning: Codex could not find bubblewrap on PATH. Install bubblewrap with your OS package manager. See the sandbox prerequisites: [URL] Codex will use the bundled bubblewrap in the meantime.\nwarning: Model metadata for `proof` not found. Defaulting to fallback metadata; this can degrade performance and cause issues.\nmcp: stackpress_proof_codex_1428440/read_articles started\nmcp: stackpress_proof_codex_1428440/read_articles (completed)\ncodex\nProof completed.\ntokens used\n4\nProof completed.\n"
+      },
+      "checks": {
+        "nativeLogin": true,
+        "protectedToolCompleted": true,
+        "automaticRenewal": true,
+        "disconnectRefusesNextConnection": true,
+        "disconnectedRenewalRefused": true,
+        "reapprovalRestoresTool": true,
+        "sameNativeKeyApi": true,
+        "idOnlyReads": true,
+        "apiBoundaries": true,
+        "apiRenewal": true,
+        "apiDisconnect": true,
+        "apiReapproval": true
+      },
+      "credentialsRemoved": true
+    },
+    {
+      "name": "claude",
+      "simulatedSignIn": true,
+      "deterministicModel": true,
+      "version": "2.1.283 (Claude Code)",
+      "login": {
+        "passed": true,
+        "redirectScheme": "http:",
+        "redirectHost": "localhost"
+      },
+      "loginTrace": [
+        {
+          "stage": "resource-discovery",
+          "hasVerifier": false
+        },
+        {
+          "stage": "server-discovery",
+          "hasVerifier": false
+        },
+        {
+          "stage": "resource-discovery",
+          "hasVerifier": false
+        },
+        {
+          "stage": "server-discovery",
+          "hasVerifier": false
+        },
+        {
+          "stage": "registration",
+          "hasVerifier": false
+        },
+        {
+          "stage": "authorization",
+          "resource": "http://127.0.0.1:42009/mcp",
+          "scope": "articles:read articles:write",
+          "pkceMethod": "S256",
+          "hasVerifier": false
+        },
+        {
+          "stage": "approval",
+          "resource": "http://127.0.0.1:42009/mcp",
+          "scope": "articles:read articles:write",
+          "pkceMethod": "S256",
+          "hasVerifier": false
+        },
+        {
+          "stage": "token",
+          "resource": "http://127.0.0.1:42009/mcp",
+          "grantType": "authorization_code",
+          "hasVerifier": true
+        }
+      ],
+      "tool": {
+        "exitCode": 0,
+        "modelCalls": [
+          {
+            "path": "/v1/messages?beta=true",
+            "tools": [
+              "mcp__stackpress_proof_claude_1428440__admin_only",
+              "mcp__stackpress_proof_claude_1428440__app_only",
+              "mcp__stackpress_proof_claude_1428440__empty_permissions",
+              "mcp__stackpress_proof_claude_1428440__public_ping",
+              "mcp__stackpress_proof_claude_1428440__read_articles",
+              "mcp__stackpress_proof_claude_1428440__write_articles"
+            ],
+            "requestedTool": "mcp__stackpress_proof_claude_1428440__read_articles",
+            "receivedToolResult": false
+          },
+          {
+            "path": "/v1/messages?beta=true",
+            "tools": [
+              "mcp__stackpress_proof_claude_1428440__admin_only",
+              "mcp__stackpress_proof_claude_1428440__app_only",
+              "mcp__stackpress_proof_claude_1428440__empty_permissions",
+              "mcp__stackpress_proof_claude_1428440__public_ping",
+              "mcp__stackpress_proof_claude_1428440__read_articles",
+              "mcp__stackpress_proof_claude_1428440__write_articles"
+            ],
+            "receivedToolResult": true
+          }
+        ],
+        "trace": [
+          {
+            "stage": "mcp-accepted",
+            "hasVerifier": false,
+            "user": "fixture-user",
+            "method": "server/discover"
+          },
+          {
+            "stage": "mcp-accepted",
+            "hasVerifier": false,
+            "user": "fixture-user",
+            "method": "initialize"
+          },
+          {
+            "stage": "mcp-accepted",
+            "hasVerifier": false,
+            "user": "fixture-user",
+            "method": "notifications/initialized"
+          },
+          {
+            "stage": "mcp-accepted",
+            "hasVerifier": false,
+            "user": "fixture-user"
+          },
+          {
+            "stage": "mcp-accepted",
+            "hasVerifier": false,
+            "user": "fixture-user",
+            "method": "tools/list"
+          },
+          {
+            "stage": "mcp-accepted",
+            "hasVerifier": false,
+            "tool": "read_articles",
+            "user": "fixture-user",
+            "method": "tools/call"
+          },
+          {
+            "stage": "mcp-tool-completed",
+            "hasVerifier": false,
+            "tool": "read_articles",
+            "user": "fixture-user",
+            "status": 200
+          }
+        ],
+        "diagnostic": "\"proof\" isn't described by this version's model catalog; update Claude Code, or map it with behavesAs on a modelPicker row (or modelOverrides, if it is a provider id of a model this version knows). Until then auto-compact keeps this session within 200k tokens (the context window it assumes); if the model accepts more, append [1m] to the model name for 1M, or set CLAUDE_CODE_MAX_CONTEXT_TOKENS to its real window; CLAUDE_CODE_DISABLE_UNKNOWN_MODEL_WINDOW_ENFORCEMENT=1 restores the previous wait-for-the-API behavior.\n[claude-code:unrecognized_model] {\"model\":\"proof\",\"query_source\":\"sdk\"}\nProof completed.\n"
+      },
+      "api": {
+        "fullKeyRead": 200,
+        "idRead": 200,
+        "fullKeyWrite": 200,
+        "idWrite": 401,
+        "omittedRoute": 403,
+        "wrongResource": 403,
+        "renewedKey": 200,
+        "oldKey": 401,
+        "revokedKey": 401,
+        "reapprovedKey": 200
+      },
+      "renewal": {
+        "exitCode": 0,
+        "modelCalls": [
+          {
+            "path": "/v1/messages?beta=true",
+            "tools": [
+              "mcp__stackpress_proof_claude_1428440__admin_only",
+              "mcp__stackpress_proof_claude_1428440__app_only",
+              "mcp__stackpress_proof_claude_1428440__empty_permissions",
+              "mcp__stackpress_proof_claude_1428440__public_ping",
+              "mcp__stackpress_proof_claude_1428440__read_articles",
+              "mcp__stackpress_proof_claude_1428440__write_articles"
+            ],
+            "requestedTool": "mcp__stackpress_proof_claude_1428440__read_articles",
+            "receivedToolResult": false
+          },
+          {
+            "path": "/v1/messages?beta=true",
+            "tools": [
+              "mcp__stackpress_proof_claude_1428440__admin_only",
+              "mcp__stackpress_proof_claude_1428440__app_only",
+              "mcp__stackpress_proof_claude_1428440__empty_permissions",
+              "mcp__stackpress_proof_claude_1428440__public_ping",
+              "mcp__stackpress_proof_claude_1428440__read_articles",
+              "mcp__stackpress_proof_claude_1428440__write_articles"
+            ],
+            "receivedToolResult": true
+          }
+        ],
+        "trace": [
+          {
+            "stage": "mcp-refused",
+            "hasVerifier": false,
+            "method": "server/discover",
+            "status": 401
+          },
+          {
+            "stage": "error",
+            "scope": "invalid_token",
+            "hasVerifier": false
+          },
+          {
+            "stage": "server-discovery",
+            "hasVerifier": false
+          },
+          {
+            "stage": "resource-discovery",
+            "hasVerifier": false
+          },
+          {
+            "stage": "token",
+            "resource": "http://127.0.0.1:42009/mcp",
+            "grantType": "refresh_token",
+            "hasVerifier": false
+          },
+          {
+            "stage": "mcp-accepted",
+            "hasVerifier": false,
+            "user": "fixture-user",
+            "method": "server/discover"
+          },
+          {
+            "stage": "mcp-accepted",
+            "hasVerifier": false,
+            "user": "fixture-user",
+            "method": "initialize"
+          },
+          {
+            "stage": "mcp-accepted",
+            "hasVerifier": false,
+            "user": "fixture-user",
+            "method": "notifications/initialized"
+          },
+          {
+            "stage": "mcp-accepted",
+            "hasVerifier": false,
+            "user": "fixture-user"
+          },
+          {
+            "stage": "mcp-accepted",
+            "hasVerifier": false,
+            "user": "fixture-user",
+            "method": "tools/list"
+          },
+          {
+            "stage": "mcp-accepted",
+            "hasVerifier": false,
+            "tool": "read_articles",
+            "user": "fixture-user",
+            "method": "tools/call"
+          },
+          {
+            "stage": "mcp-tool-completed",
+            "hasVerifier": false,
+            "tool": "read_articles",
+            "user": "fixture-user",
+            "status": 200
+          }
+        ],
+        "diagnostic": "\"proof\" isn't described by this version's model catalog; update Claude Code, or map it with behavesAs on a modelPicker row (or modelOverrides, if it is a provider id of a model this version knows). Until then auto-compact keeps this session within 200k tokens (the context window it assumes); if the model accepts more, append [1m] to the model name for 1M, or set CLAUDE_CODE_MAX_CONTEXT_TOKENS to its real window; CLAUDE_CODE_DISABLE_UNKNOWN_MODEL_WINDOW_ENFORCEMENT=1 restores the previous wait-for-the-API behavior.\n[claude-code:unrecognized_model] {\"model\":\"proof\",\"query_source\":\"sdk\"}\nProof completed.\n"
+      },
+      "revoked": {
+        "exitCode": 0,
+        "modelCalls": [
+          {
+            "path": "/v1/messages?beta=true",
+            "tools": [],
+            "receivedToolResult": false
+          }
+        ],
+        "trace": [
+          {
+            "stage": "mcp-refused",
+            "hasVerifier": false,
+            "method": "server/discover",
+            "status": 401
+          },
+          {
+            "stage": "error",
+            "scope": "invalid_token",
+            "hasVerifier": false
+          },
+          {
+            "stage": "server-discovery",
+            "hasVerifier": false
+          },
+          {
+            "stage": "resource-discovery",
+            "hasVerifier": false
+          },
+          {
+            "stage": "token",
+            "resource": "http://127.0.0.1:42009/mcp",
+            "grantType": "refresh_token",
+            "hasVerifier": false
+          },
+          {
+            "stage": "error",
+            "scope": "invalid_grant",
+            "hasVerifier": false
+          }
+        ],
+        "diagnostic": "\"proof\" isn't described by this version's model catalog; update Claude Code, or map it with behavesAs on a modelPicker row (or modelOverrides, if it is a provider id of a model this version knows). Until then auto-compact keeps this session within 200k tokens (the context window it assumes); if the model accepts more, append [1m] to the model name for 1M, or set CLAUDE_CODE_MAX_CONTEXT_TOKENS to its real window; CLAUDE_CODE_DISABLE_UNKNOWN_MODEL_WINDOW_ENFORCEMENT=1 restores the previous wait-for-the-API behavior.\n[claude-code:unrecognized_model] {\"model\":\"proof\",\"query_source\":\"sdk\"}\nProof completed.\n"
+      },
+      "reapproval": {
+        "passed": true,
+        "redirectScheme": "http:",
+        "redirectHost": "localhost"
+      },
+      "restored": {
+        "exitCode": 0,
+        "modelCalls": [
+          {
+            "path": "/v1/messages?beta=true",
+            "tools": [
+              "mcp__stackpress_proof_claude_1428440__admin_only",
+              "mcp__stackpress_proof_claude_1428440__app_only",
+              "mcp__stackpress_proof_claude_1428440__empty_permissions",
+              "mcp__stackpress_proof_claude_1428440__public_ping",
+              "mcp__stackpress_proof_claude_1428440__read_articles",
+              "mcp__stackpress_proof_claude_1428440__write_articles"
+            ],
+            "requestedTool": "mcp__stackpress_proof_claude_1428440__read_articles",
+            "receivedToolResult": false
+          },
+          {
+            "path": "/v1/messages?beta=true",
+            "tools": [
+              "mcp__stackpress_proof_claude_1428440__admin_only",
+              "mcp__stackpress_proof_claude_1428440__app_only",
+              "mcp__stackpress_proof_claude_1428440__empty_permissions",
+              "mcp__stackpress_proof_claude_1428440__public_ping",
+              "mcp__stackpress_proof_claude_1428440__read_articles",
+              "mcp__stackpress_proof_claude_1428440__write_articles"
+            ],
+            "receivedToolResult": true
+          }
+        ],
+        "trace": [
+          {
+            "stage": "mcp-accepted",
+            "hasVerifier": false,
+            "user": "fixture-user",
+            "method": "server/discover"
+          },
+          {
+            "stage": "mcp-accepted",
+            "hasVerifier": false,
+            "user": "fixture-user",
+            "method": "initialize"
+          },
+          {
+            "stage": "mcp-accepted",
+            "hasVerifier": false,
+            "user": "fixture-user",
+            "method": "notifications/initialized"
+          },
+          {
+            "stage": "mcp-accepted",
+            "hasVerifier": false,
+            "user": "fixture-user"
+          },
+          {
+            "stage": "mcp-accepted",
+            "hasVerifier": false,
+            "user": "fixture-user",
+            "method": "tools/list"
+          },
+          {
+            "stage": "mcp-accepted",
+            "hasVerifier": false,
+            "tool": "read_articles",
+            "user": "fixture-user",
+            "method": "tools/call"
+          },
+          {
+            "stage": "mcp-tool-completed",
+            "hasVerifier": false,
+            "tool": "read_articles",
+            "user": "fixture-user",
+            "status": 200
+          }
+        ],
+        "diagnostic": "\"proof\" isn't described by this version's model catalog; update Claude Code, or map it with behavesAs on a modelPicker row (or modelOverrides, if it is a provider id of a model this version knows). Until then auto-compact keeps this session within 200k tokens (the context window it assumes); if the model accepts more, append [1m] to the model name for 1M, or set CLAUDE_CODE_MAX_CONTEXT_TOKENS to its real window; CLAUDE_CODE_DISABLE_UNKNOWN_MODEL_WINDOW_ENFORCEMENT=1 restores the previous wait-for-the-API behavior.\n[claude-code:unrecognized_model] {\"model\":\"proof\",\"query_source\":\"sdk\"}\nProof completed.\n"
+      },
+      "checks": {
+        "nativeLogin": true,
+        "protectedToolCompleted": true,
+        "automaticRenewal": true,
+        "disconnectRefusesNextConnection": true,
+        "disconnectedRenewalRefused": true,
+        "reapprovalRestoresTool": true,
+        "sameNativeKeyApi": true,
+        "idOnlyReads": true,
+        "apiBoundaries": true,
+        "apiRenewal": true,
+        "apiDisconnect": true,
+        "apiReapproval": true
+      },
+      "credentialsRemoved": true
+    }
+  ]
+}

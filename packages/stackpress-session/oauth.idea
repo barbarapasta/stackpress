@@ -1,0 +1,574 @@
+//OAuth private storage schema (spec 00005-mcp-native-oauth, storage.md,
+//amendment A-001 in decisions.md). These nine models back the native
+//MCP/API OAuth feature.
+//
+//Per amendment A-001 (approved 2026-10-15, after the original "no
+//generated admin exposure" rule proved unenforceable - stackpress-admin
+//generates a reachable admin page for every model in the schema with no
+//per-model opt-out, and the user chose not to change that maintainer
+//package): OAuth admin pages are treated the same as the existing Auth,
+//Application and Session records. They are reachable only by roles the
+//app's access rules allow and are not added to the default admin menu
+//(an app-level concern, not something this schema controls), but they
+//may exist and may be genuinely useful.
+//
+//Columns get `@list.*`/`@view.*` (read-only search/detail display) only
+//when they hold no credential material. Every column whose value is a
+//hash of a credential, a raw PKCE/receipt value, or an unvalidated
+//metadata blob carries no `@list.*`/`@view.*`/`@field.*`/`@filter.*` at
+//all, so it is never rendered or searchable: `urlHash`, `bindingHash`,
+//`codeChallenge` (both places), `factorReceipt`, `readIdHash`,
+//`fullKeyHash`, `codeHash`, `tokenHash`, `legacyIdHash`, `keyHash`, and
+//both `metadata` columns. This was verified directly against generated
+//output, not assumed from the attributes alone - see task 00003's notes.
+//
+//No column anywhere carries `@field.*`/`@filter.*`: these records have
+//no generated create/update form or search filter. Browsing the safe
+//columns above is the full generated admin surface; creating or
+//editing a grant/code/token through a raw admin form would let an
+//operator fabricate or mutate access state without going through
+//OAuthStore.ts's hashing/locking/approval logic at all, which is a
+//materially different (and worse) risk than an existing Auth/
+//Application/Session edit form, so it is not offered here even though
+//A-001 would permit it. MCP tool exposure stays config opt-in
+//(`mcp.tools`) and API route exposure stays config opt-in, both
+//unaffected by anything in this file.
+use "stackpress-session/schema.idea"
+
+//A registered or document-identified OAuth client. Document clients never
+//retain a fetched body here; that lives in OAuthClientDocument. There is no
+//client password: public clients only (auth method "none").
+model OAuthClient
+  @labels("OAuth Client" "OAuth Clients")
+  @icon("laptop")
+  @display("{{clientId}}")
+{
+  id            String
+                @id @default("cuid()")
+                @label("ID")
+                @description("Unique generated internal identifier.")
+
+  clientId      String
+                @unique
+                @label("Client ID")
+                @list.string @view.string
+                @description("Exact public client_id (registered client ID or client document URL).")
+
+  kind          String
+                @default("registered")
+                @label("Kind")
+                @list.string @view.string
+                @description("document or registered.")
+
+  metadata      Hash?
+                @description("Registered-client metadata only (redirect_uris, grant_types, response_types, token_endpoint_auth_method, client_name). Document clients keep no fetched body here. No DB default: real MySQL rejects DEFAULT on a JSON column (task 00011 found this against the real generated schema); the field is nullable and OAuthStore.ts always supplies it explicitly on insert.")
+
+  created       Datetime
+                @default("now()")
+                @label("Created")
+                @list.date("m d, Y h:iA") @view.date("m d, Y h:iA")
+                @description("Generated timestamp when row was created.")
+
+  lastUsed      Datetime?
+                @label("Last Used")
+                @list.date("m d, Y h:iA") @view.date("m d, Y h:iA")
+                @description("Timestamp this client identity was last referenced by an active grant or request.")
+
+  unusedExpires Datetime?
+                @label("Unused Expires")
+                @list.date("m d, Y h:iA") @view.date("m d, Y h:iA")
+                @description("When an unreferenced dynamically registered client is eligible for cleanup.")
+}
+
+//A bounded, separately cached document-client metadata fetch. Never caches
+//an error response or a no-store body; those live only for one request.
+model OAuthClientDocument
+  @labels("OAuth Client Document" "OAuth Client Documents")
+  @icon("file")
+{
+  id           String
+               @id @default("cuid()")
+               @label("ID")
+               @description("Unique generated internal identifier.")
+
+  urlHash      String
+               @unique
+               @description("SHA-256 hash of the exact canonical client document URL.")
+
+  metadata     Hash?
+               @description("Last validated client metadata document body. No DB default; see OAuthClient.metadata above.")
+
+  etag         String?
+               @label("ETag")
+               @list.string @view.string
+               @description("HTTP ETag validator from the last successful fetch.")
+
+  lastModified String?
+               @label("Last Modified")
+               @list.string @view.string
+               @description("HTTP Last-Modified validator from the last successful fetch.")
+
+  freshUntil   Datetime?
+               @label("Fresh Until")
+               @list.date("m d, Y h:iA") @view.date("m d, Y h:iA")
+               @description("Cached-copy freshness deadline, bounded by clientMetadata.maxAgeSeconds and the response's own HTTP lifetime.")
+
+  lastUsed     Datetime?
+               @label("Last Used")
+               @list.date("m d, Y h:iA") @view.date("m d, Y h:iA")
+               @description("Timestamp this cached document was last served or revalidated.")
+
+  created      Datetime
+               @default("now()")
+               @label("Created")
+               @list.date("m d, Y h:iA") @view.date("m d, Y h:iA")
+               @description("Generated timestamp when row was created.")
+
+  updated      Datetime
+               @default("now()") @timestamp
+               @label("Updated")
+               @list.date("m d, Y h:iA") @view.date("m d, Y h:iA")
+               @description("Generated timestamp that is updated whenever the row has changed.")
+}
+
+//A saved, server-side authorization-in-progress request bound to a
+//continuation cookie. The pending reference alone grants nothing.
+model OAuthPending
+  @labels("OAuth Pending" "OAuth Pendings")
+  @icon("hourglass")
+  @display("{{clientId}}")
+{
+  id                  String
+                      @id @default("cuid()")
+                      @label("ID")
+                      @description("Random internal reference (also the opaque pending value returned to the browser).")
+
+  bindingHash         String
+                      @unique
+                      @description("SHA-256 hash of the unguessable HttpOnly browser continuation cookie value.")
+
+  clientId            String
+                      @label("Client ID")
+                      @list.string @view.string
+                      @description("Checked client_id from the authorization request.")
+
+  redirectUri         String
+                      @label("Redirect URI")
+                      @list.string @view.string
+                      @description("Checked exact redirect_uri from the authorization request.")
+
+  state               String?
+                      @label("State")
+                      @list.string @view.string
+                      @description("Caller-supplied opaque state, echoed back unmodified.")
+
+  codeChallenge       String
+                      @description("PKCE S256 code_challenge from the authorization request.")
+
+  codeChallengeMethod String
+                      @default("S256")
+                      @label("Challenge Method")
+                      @list.string @view.string
+                      @description("PKCE challenge method; only S256 is accepted.")
+
+  resource            String
+                      @label("Resource")
+                      @list.string @view.string
+                      @description("Checked exact canonical resource URL being requested.")
+
+  scopes              String[]
+                      @label("Scopes")
+                      @list.taglist @view.taglist
+                      @description("Requested configured scope set, narrowed by app policy and later by the person's own selection. No DB default: real MySQL rejects DEFAULT on a JSON column (task 00011 found this against the real generated schema); OAuthStore.ts always supplies this explicitly on insert.")
+
+  operations          String[]
+                      @label("Operations")
+                      @list.taglist @view.taglist
+                      @description("Requested explicitly opted-in API operation IDs for the resource. No DB default; see scopes above.")
+
+  profileId           String?
+                      @label("Profile ID")
+                      @list.string @view.string
+                      @description("Bound current profile once sign-in completes; null while unauthenticated.")
+
+  approvedScopes      String[]
+                      @label("Approved Scopes")
+                      @list.taglist @view.taglist
+                      @description("Scope subset the person approved on the form; empty until approval/denial. No DB default; see scopes above.")
+
+  approvedOperations  String[]
+                      @label("Approved Operations")
+                      @list.taglist @view.taglist
+                      @description("Operation subset the person approved on the form; empty until approval/denial. No DB default; see scopes above.")
+
+  //Text (TEXT column), not String (VARCHAR(255)): the full signed
+  //receipt embeds the bound selection and exceeds 255 characters.
+  factorReceipt       Text?
+                      @description("Server-bound signed factor verification receipt, valid at most 5 minutes and never past pending expiry.")
+
+  status              String
+                      @default("pending")
+                      @label("Status")
+                      @list.string @view.string
+                      @description("pending, completed, or denied.")
+
+  lockToken           String?
+                      @description("Internal-only CAS verification token for OAuthStore.ts's _claim() helper; never a credential, carries no display decorators.")
+
+  expires             Datetime
+                      @label("Expires")
+                      @list.date("m d, Y h:iA") @view.date("m d, Y h:iA")
+                      @description("Pending request expiry, including time spent signing in.")
+
+  created             Datetime
+                      @default("now()")
+                      @label("Created")
+                      @list.date("m d, Y h:iA") @view.date("m d, Y h:iA")
+                      @description("Generated timestamp when row was created.")
+
+  updated             Datetime
+                      @default("now()") @timestamp
+                      @label("Updated")
+                      @list.date("m d, Y h:iA") @view.date("m d, Y h:iA")
+                      @description("Generated timestamp that is updated whenever the row has changed.")
+}
+
+//A stable, noncredential approval record. grantId is safe as a connection-
+//management reference but never authorizes access by itself.
+model OAuthGrant
+  @labels("OAuth Grant" "OAuth Grants")
+  @icon("key")
+  @display("{{clientId}}")
+{
+  id                     String
+                         @id @default("cuid()")
+                         @label("ID")
+                         @description("Stable noncredential grant identifier.")
+
+  profileId              String
+                         @label("Profile ID")
+                         @list.string @view.string
+                         @description("Profile that approved this grant.")
+
+  clientId               String
+                         @label("Client ID")
+                         @list.string @view.string
+                         @description("Client this grant was approved for.")
+
+  resource               String
+                         @label("Resource")
+                         @list.string @view.string
+                         @description("Exact canonical resource URL this grant covers.")
+
+  scopes                 String[]
+                         @label("Scopes")
+                         @list.taglist @view.taglist
+                         @description("Currently approved scope set; may only narrow over the grant's lifetime, never grow. No DB default: real MySQL rejects DEFAULT on a JSON column (task 00011 found this against the real generated schema); OAuthStore.ts always supplies this explicitly on insert.")
+
+  operationFingerprints  String[]
+                         @label("Operation Fingerprints")
+                         @list.taglist @view.taglist
+                         @description("Approved API operation descriptor fingerprints (id/method/route/event/fixed-data/scope canonicalization). No DB default; see scopes above.")
+
+  approved               Datetime
+                         @default("now()")
+                         @label("Approved")
+                         @list.date("m d, Y h:iA") @view.date("m d, Y h:iA")
+                         @description("Timestamp the approval was granted.")
+
+  deadline               Datetime
+                         @label("Deadline")
+                         @list.date("m d, Y h:iA") @view.date("m d, Y h:iA")
+                         @description("Immutable final deadline; renewal can never move this value.")
+
+  accessSeconds          Integer
+                         @label("Access Seconds")
+                         @list.number @view.number
+                         @description("Configured access lifetime ceiling at approval time.")
+
+  readIdHash             String?
+                         @unique
+                         @description("SHA-256 hash of the current read-only access ID, cleared on cancellation.")
+
+  fullKeyHash            String?
+                         @description("SHA-256 hash of the current full id:secret access key; null until issued, cleared on cancellation.")
+
+  accessExpires          Datetime?
+                         @label("Access Expires")
+                         @list.date("m d, Y h:iA") @view.date("m d, Y h:iA")
+                         @description("Current access expiry; null until a key is issued. Always min(now + accessSeconds, deadline).")
+
+  generation             Integer
+                         @default(0)
+                         @label("Generation")
+                         @list.number @view.number
+                         @description("Token generation; advances whenever access/refresh credentials rotate.")
+
+  lockVersion            Integer
+                         @default(0)
+                         @description("Optimistic lock version, distinct from generation; every atomic grant mutation increments this first.")
+
+  lockToken              String?
+                         @description("Internal-only CAS verification token for OAuthStore.ts's _claim() helper; never a credential, carries no display decorators.")
+
+  revision               Integer
+                         @default(0)
+                         @label("Revision")
+                         @list.number @view.number
+                         @description("Monotonic catalog revision; advances on changes that invalidate access or catalog state, for distributed tool-list polling.")
+
+  active                 Boolean
+                         @default(true)
+                         @label("Active")
+                         @list.yesno @view.yesno
+                         @description("False once cancelled (disconnect, revocation, or detected reuse).")
+
+  created                Datetime
+                         @default("now()")
+                         @label("Created")
+                         @list.date("m d, Y h:iA") @view.date("m d, Y h:iA")
+                         @description("Generated timestamp when row was created.")
+
+  updated                Datetime
+                         @default("now()") @timestamp
+                         @label("Updated")
+                         @list.date("m d, Y h:iA") @view.date("m d, Y h:iA")
+                         @description("Generated timestamp that is updated whenever the row has changed.")
+}
+
+//A single-use authorization code. Consumed history is preserved until the
+//grant deadline so replay stays detectable even after the short code expiry.
+model OAuthCode
+  @labels("OAuth Code" "OAuth Codes")
+  @icon("ticket")
+  @display("{{grantId}}")
+{
+  id           String
+               @id @default("cuid()")
+               @label("ID")
+               @description("Unique generated internal identifier.")
+
+  codeHash     String
+               @unique
+               @description("SHA-256 hash of the single-use authorization code.")
+
+  grantId      String
+               @label("Grant ID")
+               @list.string @view.string
+               @description("Grant this code was issued for.")
+
+  clientId     String
+               @label("Client ID")
+               @list.string @view.string
+               @description("Client this code was issued to.")
+
+  resource     String
+               @label("Resource")
+               @list.string @view.string
+               @description("Exact canonical resource URL this code is bound to.")
+
+  redirectUri  String
+               @label("Redirect URI")
+               @list.string @view.string
+               @description("Exact redirect_uri this code is bound to.")
+
+  codeChallenge String
+               @description("PKCE S256 code_challenge this code is bound to.")
+
+  expires      Datetime
+               @label("Expires")
+               @list.date("m d, Y h:iA") @view.date("m d, Y h:iA")
+               @description("Short code expiry (codeSeconds).")
+
+  consumed     Datetime?
+               @label("Consumed")
+               @list.date("m d, Y h:iA") @view.date("m d, Y h:iA")
+               @description("Timestamp the code was exchanged; null while unused. Preserved for replay detection until the grant deadline.")
+
+  created      Datetime
+               @default("now()")
+               @label("Created")
+               @list.date("m d, Y h:iA") @view.date("m d, Y h:iA")
+               @description("Generated timestamp when row was created.")
+}
+
+//A rotating refresh token. Consumed history is preserved until the grant's
+//final expiry so refresh reuse stays detectable.
+model OAuthRefreshToken
+  @labels("OAuth Refresh Token" "OAuth Refresh Tokens")
+  @icon("sync")
+  @display("{{grantId}}")
+{
+  id         String
+             @id @default("cuid()")
+             @label("ID")
+             @description("Unique generated internal identifier.")
+
+  tokenHash  String
+             @unique
+             @description("SHA-256 hash of the refresh token (oauthr_ prefixed).")
+
+  grantId    String
+             @label("Grant ID")
+             @list.string @view.string
+             @description("Grant this refresh token belongs to.")
+
+  clientId   String
+             @label("Client ID")
+             @list.string @view.string
+             @description("Client this refresh token was issued to.")
+
+  resource   String
+             @label("Resource")
+             @list.string @view.string
+             @description("Exact canonical resource URL this refresh token is bound to.")
+
+  generation Integer
+             @default(0)
+             @label("Generation")
+             @list.number @view.number
+             @description("Token generation at issuance; must match the grant's current generation to be honored.")
+
+  issued     Datetime
+             @default("now()")
+             @label("Issued")
+             @list.date("m d, Y h:iA") @view.date("m d, Y h:iA")
+             @description("Timestamp this refresh token was issued.")
+
+  consumed   Datetime?
+             @label("Consumed")
+             @list.date("m d, Y h:iA") @view.date("m d, Y h:iA")
+             @description("Timestamp this refresh token was exchanged (rotated away); null while unused.")
+
+  expires    Datetime
+             @label("Expires")
+             @list.date("m d, Y h:iA") @view.date("m d, Y h:iA")
+             @description("Final refresh-token expiry, capped by the grant deadline.")
+}
+
+//Explicit binding of a selected pre-existing legacy Application/Session key
+//to a declared OAuth-enabled MCP resource. Copies no secret or scope.
+model OAuthLegacyBinding
+  @labels("OAuth Legacy Binding" "OAuth Legacy Bindings")
+  @icon("link")
+  @display("{{kind}}")
+{
+  id           String
+               @id @default("cuid()")
+               @label("ID")
+               @description("Unique generated internal identifier.")
+
+  kind         String
+               @label("Kind")
+               @list.string @view.string
+               @description("app or session: which legacy record kind this binding covers.")
+
+  legacyIdHash String
+               @description("SHA-256 hash of the bound legacy Application/Session record ID.")
+
+  incarnation  String
+               @label("Incarnation")
+               @list.string @view.string
+               @description("Immutable source-record incarnation reference; deletion/recreation of the legacy row invalidates this binding even if the ID is reused.")
+
+  resource     String
+               @label("Resource")
+               @list.string @view.string
+               @description("Exact canonical resource URL this legacy key is bound to for MCP access.")
+
+  active       Boolean
+               @default(true)
+               @label("Active")
+               @list.yesno @view.yesno
+               @description("False once the binding has been explicitly removed.")
+
+  expires      Datetime?
+               @label("Expires")
+               @list.date("m d, Y h:iA") @view.date("m d, Y h:iA")
+               @description("Optional binding expiry; never outlives the original legacy key.")
+
+  created      Datetime
+               @default("now()")
+               @label("Created")
+               @list.date("m d, Y h:iA") @view.date("m d, Y h:iA")
+               @description("Generated timestamp when row was created.")
+}
+
+//Atomic replay guard for a single verified TOTP factor use during OAuth
+//approval. Never stores the factor secret; only the last accepted counter.
+model OAuthFactorUse
+  @labels("OAuth Factor Use" "OAuth Factor Uses")
+  @icon("shield")
+  @display("{{profileId}}")
+{
+  id          String
+              @id @default("cuid()")
+              @label("ID")
+              @description("Unique generated internal identifier.")
+
+  factorId    String
+              @label("Factor ID")
+              @list.string @view.string
+              @description("The verified factor's stable identifier (never the secret).")
+
+  incarnation String
+              @label("Incarnation")
+              @list.string @view.string
+              @description("Incarnation reference of the factor source record, paired with factorId for uniqueness.")
+
+  profileId   String
+              @label("Profile ID")
+              @list.string @view.string
+              @description("Profile this verified factor belongs to.")
+
+  counter     Integer
+              @default(0)
+              @label("Counter")
+              @list.number @view.number
+              @description("Last accepted TOTP counter for this factor; advanced atomically so a retried code cannot mint multiple receipts.")
+
+  lockToken   String?
+              @description("Internal-only CAS verification token for OAuthStore.ts's _claim() helper; never a credential, carries no display decorators.")
+
+  updated     Datetime
+              @default("now()") @timestamp
+              @label("Updated")
+              @list.date("m d, Y h:iA") @view.date("m d, Y h:iA")
+              @description("Generated timestamp that is updated whenever the row has changed.")
+}
+
+//Shared atomic rate-limiter counter bucket keyed by a hashed limiter key
+//and window boundary, used across registration/authorization/token/factor/
+//client-metadata limits.
+model OAuthRateBucket
+  @labels("OAuth Rate Bucket" "OAuth Rate Buckets")
+  @icon("gauge")
+  @display("{{id}}")
+{
+  id      String
+          @id @default("cuid()")
+          @label("ID")
+          @description("Unique generated internal identifier.")
+
+  keyHash String
+          @description("SHA-256 hash of the limiter key (never the raw credential/address).")
+
+  windowStart Datetime
+          @label("Window Start")
+          @list.date("m d, Y h:iA") @view.date("m d, Y h:iA")
+          @description("This bucket's window start boundary. Named windowStart, not window: window is a reserved word in the SQL standard and in MySQL 8.0.2+, so an unquoted raw WHERE clause referencing it fails at the dialect level. This matches the column name storage/tables.ts and OAuthStore.ts already use.")
+
+  count   Integer
+          @default(0)
+          @label("Count")
+          @list.number @view.number
+          @description("Current request/attempt count within the window; advanced atomically.")
+
+  lockToken String?
+          @description("Internal-only CAS verification token for OAuthStore.ts's _claim() helper; never a credential, carries no display decorators.")
+
+  expires Datetime
+          @label("Expires")
+          @list.date("m d, Y h:iA") @view.date("m d, Y h:iA")
+          @description("When this bucket becomes eligible for bounded cleanup.")
+}

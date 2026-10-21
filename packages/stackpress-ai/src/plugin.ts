@@ -8,10 +8,13 @@ import type Server from '@stackpress/ingest/Server';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import type { AnySchema } from '@modelcontextprotocol/sdk/server/zod-compat.js';
 import { fromJSONSchema } from 'zod';
+//stackpress-session
+import type { OAuthPlugin } from 'stackpress-session/types';
 //client
 import type {
   AuthContext,
   ClientPlugin,
+  McpConfig,
   NormalizedToolConfig,
   ToolResolverServer
 } from './types.js';
@@ -145,6 +148,50 @@ export function registerCallTools(
 }
 
 /**
+ * Register trusted OAuth resource declarations for the configured
+ * standalone/attached MCP and SSE listeners. This only records the
+ * route/resource membership that finalize() checks for collisions; it
+ * does not attach any per-request verification, which arrives once
+ * session's runtime capabilities are built.
+ */
+export function registerOAuthResources(ctx: Server) {
+  const config = ctx.config.path<McpConfig>('mcp', {});
+  const http = config.oauth;
+  const sse = config.sse?.oauth;
+  if (!http && !sse) return;
+  const oauth = ctx.plugin<OAuthPlugin>('oauth');
+  if (!oauth) {
+    throw new Error('mcp.oauth requires session.oauth to be configured');
+  }
+  if (http) {
+    oauth.registerMcpResource({
+      surface: 'mcp',
+      route: ctx.config.path('mcp.route', '/mcp'),
+      resource: http.resource
+    });
+  }
+  if (sse) {
+    oauth.registerMcpResource({
+      surface: 'sse',
+      route: ctx.config.path('mcp.sse.route', ctx.config.path('mcp.route', '/mcp')),
+      resource: sse.resource
+    });
+    //configuration.md: "Enabling both transports requires distinct GET
+    // handshake routes and an unambiguous SSE message POST route. Fail
+    // startup if they collide." The message endpoint is a second,
+    // separate route for the same SSE resource; registering it too lets
+    // OAuthService.registerMcpResource's per-route collision check catch
+    // a clash with the HTTP/SSE handshake route or another declared
+    // resource, not just the handshake route by itself.
+    oauth.registerMcpResource({
+      surface: 'sse',
+      route: ctx.config.path('mcp.messages', '/messages'),
+      resource: sse.resource
+    });
+  }
+}
+
+/**
  * Register the MCP factory and transport events, and the agent events, with
  * Stackpress. The plugin activates when either `mcp` or `agent` config exists,
  * and each part registers only for its own config.
@@ -212,6 +259,13 @@ export default function plugin(ctx: Server) {
   // the app configured the agent. Each is a page that adapts the request to
   // one of the agent events
   ctx.on('route', ({ ctx }) => {
+    //an MCP listener that declares an OAuth resource registers it with the
+    // session's OAuth service, which checks the routes for collisions when
+    // the app finalizes OAuth after its routes are known
+    if (mcp) {
+      registerOAuthResources(ctx);
+    }
+
     if (!ctx.config.has('agent')) return;
     const path = base(ctx);
     ctx.import.get(`${path}/start`, () => import('./pages/start.js'));

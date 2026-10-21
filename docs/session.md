@@ -78,5 +78,7 @@ import { isRegExp } from 'stackpress/session';
 
  - [Session Detail Pages](./session/README.md)
  - [Session Class](./session/Session.md)
+ - [OAuth Setup](./oauth.md)
+ - [OAuth Upgrade And Migration](./oauth-upgrade.md)
  - [Language](./language.md)
  - [Plugin](./plugin.md)

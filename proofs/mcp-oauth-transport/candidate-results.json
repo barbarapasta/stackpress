@@ -1,0 +1,99 @@
+{
+  "node": "v22.23.2",
+  "sdk": "1.29.0",
+  "ingest": "0.10.8",
+  "checks": [
+    {
+      "name": "standalone stateful",
+      "result": "passed",
+      "cases": [
+        "anonymous init/public/protected discovery",
+        "401 before SDK stream",
+        "unknown tool rejected without effect",
+        "unclassified controls require full key",
+        "fresh renewal",
+        "ID-only read and write denial",
+        "bad secret rejects read",
+        "scope removal 403",
+        "disabled account",
+        "revocation",
+        "expiry",
+        "concurrent identity isolation",
+        "forged input cannot replace person",
+        "Origin allow/deny",
+        "cookie alone rejected",
+        "late revocation is HTTP200 protocol error with no side effect",
+        "one-time approval binding, saved identity, GET list-changed and DELETE"
+      ]
+    },
+    {
+      "name": "standalone stateless",
+      "result": "passed",
+      "cases": [
+        "anonymous init/public/protected discovery",
+        "401 before SDK stream",
+        "unknown tool rejected without effect",
+        "unclassified controls require full key",
+        "fresh renewal",
+        "ID-only read and write denial",
+        "bad secret rejects read",
+        "scope removal 403",
+        "disabled account",
+        "revocation",
+        "expiry",
+        "concurrent identity isolation",
+        "forged input cannot replace person",
+        "Origin allow/deny",
+        "cookie alone rejected",
+        "late revocation is HTTP200 protocol error with no side effect",
+        "GET/DELETE explicit405"
+      ]
+    },
+    {
+      "name": "real Ingest attached stateful",
+      "result": "passed",
+      "cases": [
+        "anonymous init/public/protected discovery",
+        "401 before SDK stream",
+        "unknown tool rejected without effect",
+        "unclassified controls require full key",
+        "fresh renewal",
+        "ID-only read and write denial",
+        "bad secret rejects read",
+        "scope removal 403",
+        "disabled account",
+        "revocation",
+        "expiry",
+        "concurrent identity isolation",
+        "forged input cannot replace person",
+        "Origin allow/deny",
+        "cookie alone rejected",
+        "late revocation is HTTP200 protocol error with no side effect",
+        "one-time approval binding, saved identity, GET list-changed and DELETE"
+      ]
+    },
+    {
+      "name": "real Ingest attached stateless",
+      "result": "passed",
+      "cases": [
+        "anonymous init/public/protected discovery",
+        "401 before SDK stream",
+        "unknown tool rejected without effect",
+        "unclassified controls require full key",
+        "fresh renewal",
+        "ID-only read and write denial",
+        "bad secret rejects read",
+        "scope removal 403",
+        "disabled account",
+        "revocation",
+        "expiry",
+        "concurrent identity isolation",
+        "forged input cannot replace person",
+        "Origin allow/deny",
+        "cookie alone rejected",
+        "late revocation is HTTP200 protocol error with no side effect",
+        "GET/DELETE explicit405"
+      ]
+    }
+  ]
+}

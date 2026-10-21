@@ -1,0 +1,777 @@
+{
+  "node": "v22.23.2",
+  "sdk": "1.29.0",
+  "passed": 35,
+  "failed": 0,
+  "candidateOnly": true,
+  "checks": [
+    {
+      "name": "SDK discovery and registration select exact declared service",
+      "passed": true
+    },
+    {
+      "name": "Approval lists exact service members and preserves state and issuer",
+      "passed": true
+    },
+    {
+      "name": "Authorization refuses a different return host or callback path",
+      "passed": true
+    },
+    {
+      "name": "Code exchange cannot switch the approved resource",
+      "passed": true
+    },
+    {
+      "name": "PKCE mismatch refuses code before successful SDK exchange",
+      "passed": true
+    },
+    {
+      "name": "SDK exchanges code for full id:secret and renewal token",
+      "passed": true
+    },
+    {
+      "name": "Consumed authorization code cannot issue another key",
+      "passed": true
+    },
+    {
+      "name": "SDK connects and calls a protected tool with issued key",
+      "passed": true
+    },
+    {
+      "name": "Same key serves an explicitly enabled ordinary API route",
+      "passed": true
+    },
+    {
+      "name": "Read ID works for GET API and configured GET MCP tool",
+      "passed": true
+    },
+    {
+      "name": "Read ID cannot write through either surface",
+      "passed": true
+    },
+    {
+      "name": "Full key writes on both approved surfaces",
+      "passed": true
+    },
+    {
+      "name": "Bad full key never falls back to its valid read ID or legacy entry",
+      "passed": true
+    },
+    {
+      "name": "One matching permission satisfies a nonempty list on both surfaces",
+      "passed": true
+    },
+    {
+      "name": "Empty configured list refuses API but permits protected MCP",
+      "passed": true
+    },
+    {
+      "name": "User approval cannot become an application identity",
+      "passed": true
+    },
+    {
+      "name": "Wrong permission is refused on both surfaces",
+      "passed": true
+    },
+    {
+      "name": "Public MCP works anonymously but protected MCP refuses",
+      "passed": true
+    },
+    {
+      "name": "Omitted and disabled route settings refuse OAuth keys",
+      "passed": true
+    },
+    {
+      "name": "Stub legacy dispatcher remains separate on omitted and disabled endpoints",
+      "passed": true
+    },
+    {
+      "name": "Same host or a matching MCP path prefix grants no membership",
+      "passed": true
+    },
+    {
+      "name": "Adding an enabled route cannot expand an existing approval",
+      "passed": true
+    },
+    {
+      "name": "Resource and membership are independent checks",
+      "passed": true
+    },
+    {
+      "name": "Wrong authorization resources are rejected exactly",
+      "passed": true
+    },
+    {
+      "name": "Missing and duplicate resource indicators cannot be silently selected",
+      "passed": true
+    },
+    {
+      "name": "Renewal cannot replace the approved resource or add permissions",
+      "passed": true
+    },
+    {
+      "name": "SDK automatically renews expired key and retries MCP call",
+      "passed": true
+    },
+    {
+      "name": "Renewal preserves both surfaces and exact membership",
+      "passed": true
+    },
+    {
+      "name": "Old full key and old read ID stay invalid after renewal",
+      "passed": true
+    },
+    {
+      "name": "Removed permissions take effect on the next API and MCP call",
+      "passed": true
+    },
+    {
+      "name": "Inactive user blocks API and MCP immediately",
+      "passed": true
+    },
+    {
+      "name": "Approval deadline caps issuance and stops access and renewal",
+      "passed": true
+    },
+    {
+      "name": "Reusing a spent renewal token cancels its family on both surfaces",
+      "passed": true
+    },
+    {
+      "name": "Explicit disconnect stops both surfaces and renewal",
+      "passed": true
+    },
+    {
+      "name": "Record maps store hashes of read IDs, secrets, and renewals",
+      "passed": true
+    }
+  ],
+  "trace": [
+    {
+      "stage": "mcp-accepted",
+      "hasVerifier": false,
+      "method": "initialize"
+    },
+    {
+      "stage": "mcp-accepted",
+      "hasVerifier": false,
+      "method": "notifications/initialized"
+    },
+    {
+      "stage": "mcp-accepted",
+      "hasVerifier": false
+    },
+    {
+      "stage": "mcp-accepted",
+      "hasVerifier": false,
+      "tool": "public_ping",
+      "method": "tools/call"
+    },
+    {
+      "stage": "mcp-tool-completed",
+      "hasVerifier": false,
+      "tool": "public_ping",
+      "status": 200
+    },
+    {
+      "stage": "mcp-refused",
+      "hasVerifier": false,
+      "tool": "read_articles",
+      "method": "tools/call",
+      "status": 401
+    },
+    {
+      "stage": "error",
+      "scope": "invalid_token",
+      "hasVerifier": false
+    },
+    {
+      "stage": "resource-discovery",
+      "hasVerifier": false
+    },
+    {
+      "stage": "server-discovery",
+      "hasVerifier": false
+    },
+    {
+      "stage": "registration",
+      "hasVerifier": false
+    },
+    {
+      "stage": "authorization",
+      "resource": "http://127.0.0.1:40459/mcp",
+      "scope": "articles:read articles:write",
+      "pkceMethod": "S256",
+      "hasVerifier": false
+    },
+    {
+      "stage": "approval",
+      "resource": "http://127.0.0.1:40459/mcp",
+      "scope": "articles:read articles:write",
+      "pkceMethod": "S256",
+      "hasVerifier": false
+    },
+    {
+      "stage": "error",
+      "scope": "invalid_redirect_uri",
+      "hasVerifier": false
+    },
+    {
+      "stage": "error",
+      "scope": "invalid_redirect_uri",
+      "hasVerifier": false
+    },
+    {
+      "stage": "error",
+      "scope": "invalid_target",
+      "hasVerifier": false
+    },
+    {
+      "stage": "token",
+      "resource": "http://127.0.0.1:40459/mcp",
+      "grantType": "authorization_code",
+      "hasVerifier": true
+    },
+    {
+      "stage": "error",
+      "scope": "invalid_grant",
+      "hasVerifier": false
+    },
+    {
+      "stage": "resource-discovery",
+      "hasVerifier": false
+    },
+    {
+      "stage": "server-discovery",
+      "hasVerifier": false
+    },
+    {
+      "stage": "token",
+      "resource": "http://127.0.0.1:40459/mcp",
+      "grantType": "authorization_code",
+      "hasVerifier": true
+    },
+    {
+      "stage": "token",
+      "resource": "http://127.0.0.1:40459/mcp",
+      "grantType": "authorization_code",
+      "hasVerifier": true
+    },
+    {
+      "stage": "error",
+      "scope": "invalid_grant",
+      "hasVerifier": false
+    },
+    {
+      "stage": "mcp-accepted",
+      "hasVerifier": false,
+      "user": "fixture-user",
+      "method": "initialize"
+    },
+    {
+      "stage": "mcp-accepted",
+      "hasVerifier": false,
+      "user": "fixture-user",
+      "method": "notifications/initialized"
+    },
+    {
+      "stage": "mcp-accepted",
+      "hasVerifier": false,
+      "user": "fixture-user"
+    },
+    {
+      "stage": "mcp-accepted",
+      "hasVerifier": false,
+      "tool": "read_articles",
+      "user": "fixture-user",
+      "method": "tools/call"
+    },
+    {
+      "stage": "mcp-tool-completed",
+      "hasVerifier": false,
+      "tool": "read_articles",
+      "user": "fixture-user",
+      "status": 200
+    },
+    {
+      "stage": "mcp-accepted",
+      "hasVerifier": false,
+      "tool": "read_articles",
+      "user": "fixture-user",
+      "method": "tools/call"
+    },
+    {
+      "stage": "mcp-tool-completed",
+      "hasVerifier": false,
+      "tool": "read_articles",
+      "user": "fixture-user",
+      "status": 200
+    },
+    {
+      "stage": "error",
+      "scope": "invalid_token",
+      "hasVerifier": false
+    },
+    {
+      "stage": "mcp-refused",
+      "hasVerifier": false,
+      "tool": "write_articles",
+      "method": "tools/call",
+      "status": 401
+    },
+    {
+      "stage": "error",
+      "scope": "invalid_token",
+      "hasVerifier": false
+    },
+    {
+      "stage": "mcp-accepted",
+      "hasVerifier": false,
+      "tool": "write_articles",
+      "user": "fixture-user",
+      "method": "tools/call"
+    },
+    {
+      "stage": "mcp-tool-completed",
+      "hasVerifier": false,
+      "tool": "write_articles",
+      "user": "fixture-user",
+      "status": 200
+    },
+    {
+      "stage": "error",
+      "scope": "invalid_token",
+      "hasVerifier": false
+    },
+    {
+      "stage": "mcp-refused",
+      "hasVerifier": false,
+      "tool": "read_articles",
+      "method": "tools/call",
+      "status": 401
+    },
+    {
+      "stage": "error",
+      "scope": "invalid_token",
+      "hasVerifier": false
+    },
+    {
+      "stage": "mcp-refused",
+      "hasVerifier": false,
+      "tool": "public_ping",
+      "method": "tools/call",
+      "status": 401
+    },
+    {
+      "stage": "error",
+      "scope": "invalid_token",
+      "hasVerifier": false
+    },
+    {
+      "stage": "mcp-accepted",
+      "hasVerifier": false,
+      "tool": "read_articles",
+      "user": "fixture-user",
+      "method": "tools/call"
+    },
+    {
+      "stage": "mcp-tool-completed",
+      "hasVerifier": false,
+      "tool": "read_articles",
+      "user": "fixture-user",
+      "status": 200
+    },
+    {
+      "stage": "error",
+      "scope": "insufficient_scope",
+      "hasVerifier": false
+    },
+    {
+      "stage": "mcp-accepted",
+      "hasVerifier": false,
+      "tool": "empty_permissions",
+      "user": "fixture-user",
+      "method": "tools/call"
+    },
+    {
+      "stage": "mcp-tool-completed",
+      "hasVerifier": false,
+      "tool": "empty_permissions",
+      "user": "fixture-user",
+      "status": 200
+    },
+    {
+      "stage": "error",
+      "scope": "wrong_caller_type",
+      "hasVerifier": false
+    },
+    {
+      "stage": "mcp-refused",
+      "hasVerifier": false,
+      "tool": "app_only",
+      "method": "tools/call",
+      "status": 403
+    },
+    {
+      "stage": "error",
+      "scope": "wrong_caller_type",
+      "hasVerifier": false
+    },
+    {
+      "stage": "error",
+      "scope": "insufficient_scope",
+      "hasVerifier": false
+    },
+    {
+      "stage": "mcp-refused",
+      "hasVerifier": false,
+      "tool": "admin_only",
+      "method": "tools/call",
+      "status": 403
+    },
+    {
+      "stage": "error",
+      "scope": "insufficient_scope",
+      "hasVerifier": false
+    },
+    {
+      "stage": "mcp-accepted",
+      "hasVerifier": false,
+      "tool": "public_ping",
+      "method": "tools/call"
+    },
+    {
+      "stage": "mcp-tool-completed",
+      "hasVerifier": false,
+      "tool": "public_ping",
+      "status": 200
+    },
+    {
+      "stage": "mcp-refused",
+      "hasVerifier": false,
+      "tool": "read_articles",
+      "method": "tools/call",
+      "status": 401
+    },
+    {
+      "stage": "error",
+      "scope": "invalid_token",
+      "hasVerifier": false
+    },
+    {
+      "stage": "error",
+      "scope": "invalid_target",
+      "hasVerifier": false
+    },
+    {
+      "stage": "error",
+      "scope": "invalid_target",
+      "hasVerifier": false
+    },
+    {
+      "stage": "error",
+      "scope": "oauth_disabled",
+      "hasVerifier": false
+    },
+    {
+      "stage": "error",
+      "scope": "oauth_disabled",
+      "hasVerifier": false
+    },
+    {
+      "stage": "error",
+      "scope": "invalid_target",
+      "hasVerifier": false
+    },
+    {
+      "stage": "error",
+      "scope": "invalid_target",
+      "hasVerifier": false
+    },
+    {
+      "stage": "error",
+      "scope": "invalid_target",
+      "hasVerifier": false
+    },
+    {
+      "stage": "error",
+      "scope": "invalid_target",
+      "hasVerifier": false
+    },
+    {
+      "stage": "error",
+      "scope": "invalid_target",
+      "hasVerifier": false
+    },
+    {
+      "stage": "error",
+      "scope": "invalid_target",
+      "hasVerifier": false
+    },
+    {
+      "stage": "error",
+      "scope": "invalid_target",
+      "hasVerifier": false
+    },
+    {
+      "stage": "error",
+      "scope": "invalid_target",
+      "hasVerifier": false
+    },
+    {
+      "stage": "error",
+      "scope": "invalid_target",
+      "hasVerifier": false
+    },
+    {
+      "stage": "error",
+      "scope": "invalid_request",
+      "hasVerifier": false
+    },
+    {
+      "stage": "error",
+      "scope": "invalid_request",
+      "hasVerifier": false
+    },
+    {
+      "stage": "error",
+      "scope": "invalid_target",
+      "hasVerifier": false
+    },
+    {
+      "stage": "error",
+      "scope": "invalid_target",
+      "hasVerifier": false
+    },
+    {
+      "stage": "error",
+      "scope": "invalid_target",
+      "hasVerifier": false
+    },
+    {
+      "stage": "token",
+      "resource": "http://127.0.0.1:40459/mcp",
+      "scope": "articles:read admin:write",
+      "grantType": "refresh_token",
+      "hasVerifier": false
+    },
+    {
+      "stage": "error",
+      "scope": "invalid_scope",
+      "hasVerifier": false
+    },
+    {
+      "stage": "mcp-refused",
+      "hasVerifier": false,
+      "tool": "read_articles",
+      "method": "tools/call",
+      "status": 401
+    },
+    {
+      "stage": "error",
+      "scope": "invalid_token",
+      "hasVerifier": false
+    },
+    {
+      "stage": "resource-discovery",
+      "hasVerifier": false
+    },
+    {
+      "stage": "server-discovery",
+      "hasVerifier": false
+    },
+    {
+      "stage": "token",
+      "resource": "http://127.0.0.1:40459/mcp",
+      "grantType": "refresh_token",
+      "hasVerifier": false
+    },
+    {
+      "stage": "mcp-accepted",
+      "hasVerifier": false,
+      "tool": "read_articles",
+      "user": "fixture-user",
+      "method": "tools/call"
+    },
+    {
+      "stage": "mcp-tool-completed",
+      "hasVerifier": false,
+      "tool": "read_articles",
+      "user": "fixture-user",
+      "status": 200
+    },
+    {
+      "stage": "error",
+      "scope": "invalid_target",
+      "hasVerifier": false
+    },
+    {
+      "stage": "error",
+      "scope": "invalid_target",
+      "hasVerifier": false
+    },
+    {
+      "stage": "mcp-accepted",
+      "hasVerifier": false,
+      "tool": "write_articles",
+      "user": "fixture-user",
+      "method": "tools/call"
+    },
+    {
+      "stage": "mcp-tool-completed",
+      "hasVerifier": false,
+      "tool": "write_articles",
+      "user": "fixture-user",
+      "status": 200
+    },
+    {
+      "stage": "error",
+      "scope": "invalid_token",
+      "hasVerifier": false
+    },
+    {
+      "stage": "mcp-refused",
+      "hasVerifier": false,
+      "tool": "read_articles",
+      "method": "tools/call",
+      "status": 401
+    },
+    {
+      "stage": "error",
+      "scope": "invalid_token",
+      "hasVerifier": false
+    },
+    {
+      "stage": "error",
+      "scope": "insufficient_scope",
+      "hasVerifier": false
+    },
+    {
+      "stage": "mcp-refused",
+      "hasVerifier": false,
+      "tool": "read_articles",
+      "method": "tools/call",
+      "status": 403
+    },
+    {
+      "stage": "error",
+      "scope": "insufficient_scope",
+      "hasVerifier": false
+    },
+    {
+      "stage": "mcp-accepted",
+      "hasVerifier": false,
+      "tool": "empty_permissions",
+      "user": "fixture-user",
+      "method": "tools/call"
+    },
+    {
+      "stage": "mcp-tool-completed",
+      "hasVerifier": false,
+      "tool": "empty_permissions",
+      "user": "fixture-user",
+      "status": 200
+    },
+    {
+      "stage": "error",
+      "scope": "invalid_token",
+      "hasVerifier": false
+    },
+    {
+      "stage": "mcp-refused",
+      "hasVerifier": false,
+      "tool": "read_articles",
+      "method": "tools/call",
+      "status": 401
+    },
+    {
+      "stage": "error",
+      "scope": "invalid_token",
+      "hasVerifier": false
+    },
+    {
+      "stage": "error",
+      "scope": "invalid_token",
+      "hasVerifier": false
+    },
+    {
+      "stage": "mcp-refused",
+      "hasVerifier": false,
+      "tool": "read_articles",
+      "method": "tools/call",
+      "status": 401
+    },
+    {
+      "stage": "error",
+      "scope": "invalid_token",
+      "hasVerifier": false
+    },
+    {
+      "stage": "token",
+      "resource": "http://127.0.0.1:40459/mcp",
+      "grantType": "refresh_token",
+      "hasVerifier": false
+    },
+    {
+      "stage": "error",
+      "scope": "invalid_grant",
+      "hasVerifier": false
+    },
+    {
+      "stage": "token",
+      "resource": "http://127.0.0.1:40459/mcp",
+      "grantType": "refresh_token",
+      "hasVerifier": false
+    },
+    {
+      "stage": "error",
+      "scope": "invalid_grant",
+      "hasVerifier": false
+    },
+    {
+      "stage": "error",
+      "scope": "invalid_token",
+      "hasVerifier": false
+    },
+    {
+      "stage": "mcp-refused",
+      "hasVerifier": false,
+      "tool": "read_articles",
+      "method": "tools/call",
+      "status": 401
+    },
+    {
+      "stage": "error",
+      "scope": "invalid_token",
+      "hasVerifier": false
+    },
+    {
+      "stage": "error",
+      "scope": "invalid_token",
+      "hasVerifier": false
+    },
+    {
+      "stage": "mcp-refused",
+      "hasVerifier": false,
+      "tool": "read_articles",
+      "method": "tools/call",
+      "status": 401
+    },
+    {
+      "stage": "error",
+      "scope": "invalid_token",
+      "hasVerifier": false
+    },
+    {
+      "stage": "token",
+      "resource": "http://127.0.0.1:40459/mcp",
+      "grantType": "refresh_token",
+      "hasVerifier": false
+    },
+    {
+      "stage": "error",
+      "scope": "invalid_grant",
+      "hasVerifier": false
+    }
+  ]
+}
